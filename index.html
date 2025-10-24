@@ -1,0 +1,2807 @@
+<!DOCTYPE html>
+<!--
+    Gestione Rack con PDU - Rack PDU Management System
+    Copyright (C) 2025 Roberto Benassi
+    
+    DUAL LICENSE:
+    
+    1. NON-COMMERCIAL USE:
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.
+    
+    2. COMMERCIAL USE:
+    For commercial use, please contact the author for a commercial license.
+    Contact: info@robertobenassi.com
+    
+    Version: 1
+    Author: Roberto Benassi
+    Website: https://www.robertobenassi.com
+-->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rack & PDU</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; padding: 24px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header-section { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; position: relative; }
+        .lang-switcher { position: absolute; left: 0; top: 50%; transform: translateY(-50%); display: flex; gap: 8px; background: white; padding: 8px 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; }
+        .lang-switcher:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.15); transform: translateY(-50%) scale(1.05); }
+        .lang-flag { font-size: 1.5rem; opacity: 0.5; transition: opacity 0.2s; }
+        .lang-flag.active { opacity: 1; }
+        .main-title-input { font-size: 1.875rem; font-weight: bold; text-align: center; border: none; background: white; outline: none; padding: 12px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); color: #1f2937; }
+        .main-title-input:focus { box-shadow: 0 4px 6px rgba(0,0,0,0.15); }
+        .rack-size-select { font-size: 1.125rem; font-weight: 600; border: 2px solid #3b82f6; background: white; color: #1f2937; padding: 12px 16px; border-radius: 8px; cursor: pointer; outline: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .rack-size-select:hover { background: #eff6ff; }
+        .rack-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .rack-tab { padding: 8px 16px; border-radius: 6px; border: 2px solid #d1d5db; background: white; cursor: pointer; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
+        .rack-tab:hover { border-color: #3b82f6; background: #eff6ff; }
+        .rack-tab.active { border-color: #3b82f6; background: #3b82f6; color: white; }
+        .btn-add-rack { padding: 8px 16px; border-radius: 6px; border: 2px dashed #10b981; background: white; color: #10b981; cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
+        .btn-add-rack:hover { background: #d1fae5; border-color: #059669; color: #059669; }
+        .btn-remove-rack { margin-left: 8px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600; }
+        .btn-remove-rack:hover { background: #dc2626; }
+        .global-summary { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; margin-bottom: 16px; }
+        .summary-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; text-align: center; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+        .summary-card { background: #f9fafb; border-radius: 6px; padding: 12px; border-left: 4px solid #3b82f6; }
+        .summary-card-title { font-size: 0.875rem; font-weight: 600; color: #6b7280; margin-bottom: 8px; }
+        .summary-card-value { font-size: 1.5rem; font-weight: bold; color: #1f2937; }
+        .summary-card-detail { font-size: 0.75rem; color: #6b7280; margin-top: 4px; }
+        .grid-layout { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+        .col-2 { grid-column: span 2; max-height: 100vh; overflow-y: auto; min-width: 0; }
+        .col-4 { grid-column: span 4; }
+        .col-1-spacer { grid-column: span 1; }
+        .pdu-display { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .pdu-name { text-align: center; font-size: 0.875rem; font-weight: 600; margin-bottom: 8px; min-width: 0; }
+        .pdu-name input { text-align: center; border: none; background: white; outline: none; padding: 12px; font-size: 0.875rem; font-weight: 600; width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 0; }
+        .breaker-box { border-radius: 8px; padding: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); color: white; transition: all 0.3s; min-width: 0; overflow: hidden; }
+        .breaker-box.on { background: linear-gradient(to bottom right, #1f2937, #374151); }
+        .breaker-box.off { background: linear-gradient(to bottom right, #9ca3af, #6b7280); }
+        .breaker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; min-width: 0; }
+        .breaker-title { font-size: 0.75rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+        .breaker-controls { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn-power { padding: 6px; border-radius: 4px; border: none; cursor: pointer; transition: all 0.3s; flex-shrink: 0; }
+        .btn-power.on { background-color: #10b981; }
+        .btn-power.on:hover { background-color: #059669; }
+        .btn-power.off { background-color: #ef4444; }
+        .btn-power.off:hover { background-color: #dc2626; }
+        .btn-settings { padding: 6px; background-color: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
+        .btn-settings:hover { background-color: #2563eb; }
+        .settings-input { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .settings-input input, .settings-input select { width: 80px; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; font-size: 0.875rem; color: #1f2937; }
+        .settings-input select { width: auto; flex: 1; }
+        .load-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.75rem; }
+        .load-value { font-size: 0.75rem; font-weight: bold; white-space: nowrap; }
+        .progress-bar { width: 100%; background-color: #4b5563; border-radius: 9999px; height: 16px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 9999px; transition: width 0.3s; }
+        .progress-fill.green { background-color: #10b981; }
+        .progress-fill.red { background-color: #ef4444; }
+        .phase-box, .breaker-item { background: white; border-radius: 6px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .phase-box.disabled, .breaker-item.disabled { background: #e5e7eb; opacity: 0.5; }
+        .breakers-section { margin-top: 12px; background: #f9fafb; border-radius: 6px; padding: 8px; }
+        .breakers-section.disabled { background: #e5e7eb; opacity: 0.5; }
+        .breakers-title { font-size: 0.75rem; font-weight: 600; text-align: center; margin-bottom: 8px; }
+        .breaker-item { font-size: 0.75rem; margin-bottom: 4px; padding: 8px; }
+        .phase-bar-red { background-color: #ef4444; }
+        .phase-bar-yellow { background-color: #eab308; }
+        .phase-bar-blue { background-color: #3b82f6; }
+        .rack-container { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; }
+        .rack-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .rack-title-input { font-size: 1.25rem; font-weight: 600; border: none; background: transparent; outline: none; padding: 4px 8px; border-bottom: 2px solid transparent; }
+        .rack-title-input:focus { border-bottom: 2px solid #3b82f6; }
+        .btn-add { display: flex; align-items: center; justify-content: center; gap: 8px; background-color: #3b82f6; color: white; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .btn-add:hover { background-color: #2563eb; }
+        .rack-units { border: 4px solid #1f2937; border-radius: 8px; background: #111827; padding: 8px; }
+        .rack-unit { height: 24px; border-bottom: 1px solid #4b5563; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; background: #f9fafb; position: relative; cursor: pointer; transition: background 0.2s; }
+        .rack-unit:hover { background: #e0e7ff; }
+        .rack-unit.drop-target { background: #bfdbfe; border: 2px dashed #3b82f6; }
+        .rack-unit.drop-invalid { background: #fecaca; border: 2px dashed #ef4444; }
+        .rack-unit-label { position: absolute; left: 4px; color: #9ca3af; font-size: 0.75rem; }
+        .server-box { border: 2px solid #3b82f6; background: #dbeafe; cursor: move; display: flex; align-items: center; justify-content: center; transition: all 0.2s; position: relative; }
+        .server-box:hover { background: #bfdbfe; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); }
+        .server-box.dragging { opacity: 0.5; cursor: grabbing; }
+        .server-box.drag-over { transform: scale(1.02); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5); }
+        .server-box.no-power { border: 2px solid #dc2626; background: #fee2e2; }
+        .server-box.no-power:hover { background: #fecaca; }
+        .server-box.partial-power { border: 2px solid #f59e0b; background: #fef3c7; }
+        .server-box.partial-power:hover { background: #fde68a; }
+        .server-info { text-align: center; }
+        .server-name { display: flex; align-items: center; gap: 8px; justify-content: center; font-weight: 600; }
+        .server-details { font-size: 0.75rem; color: #4b5563; }
+        .power-icon { width: 14px; height: 14px; }
+        .power-icon.green { color: #10b981; }
+        .power-icon.blue { color: #3b82f6; }
+        .power-icon.red { color: #dc2626; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 8px; box-shadow: 0 20px 25px rgba(0,0,0,0.2); padding: 24px; width: 400px; max-height: 90vh; overflow-y: auto; }
+        .modal-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; }
+        .form-group { margin-bottom: 12px; }
+        .form-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .form-input, .form-select { width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px; font-size: 0.875rem; }
+        .form-checkbox { display: flex; align-items: center; gap: 8px; }
+        .modal-buttons { display: flex; gap: 12px; margin-top: 24px; }
+        .btn-cancel, .btn-confirm, .btn-delete { flex: 1; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
+        .btn-cancel { background-color: #d1d5db; color: #374151; }
+        .btn-cancel:hover { background-color: #9ca3af; }
+        .btn-confirm { background-color: #3b82f6; color: white; }
+        .btn-confirm:hover { background-color: #2563eb; }
+        .btn-delete { background-color: #ef4444; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-delete:hover { background-color: #dc2626; }
+        .config-panel { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; min-width: 0; overflow: hidden; }
+        .config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .config-title { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+        .btn-close-config { background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+        .btn-close-config:hover { color: #ef4444; }
+        .search-filter-box { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 12px; margin-top: 16px; transition: all 0.3s ease; }
+        .search-filter-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+        .search-filter-header:hover { opacity: 0.8; }
+        .search-filter-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; color: #1f2937; }
+        .search-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.3s ease; color: #6b7280; }
+        .search-toggle-btn:hover { color: #3b82f6; }
+        .search-toggle-btn.collapsed { transform: rotate(-90deg); }
+        .search-filter-content { max-height: 500px; overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease; opacity: 1; margin-top: 12px; }
+        .search-filter-content.collapsed { max-height: 0; opacity: 0; margin-top: 0; }
+        .search-bar { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .search-input-wrapper { flex: 1; min-width: 200px; position: relative; }
+        .search-input { width: 100%; padding: 10px 40px 10px 12px; border: 2px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; transition: border-color 0.2s; }
+        .search-input:focus { outline: none; border-color: #3b82f6; }
+        .search-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #6b7280; pointer-events: none; }
+        .clear-search { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #6b7280; cursor: pointer; background: none; border: none; padding: 4px; display: none; }
+        .clear-search.visible { display: block; }
+        .clear-search:hover { color: #ef4444; }
+        .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+        .filter-chip { padding: 6px 12px; border-radius: 20px; border: 2px solid #d1d5db; background: white; cursor: pointer; font-size: 0.875rem; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+        .filter-chip:hover { border-color: #3b82f6; background: #eff6ff; }
+        .filter-chip.active { border-color: #3b82f6; background: #3b82f6; color: white; }
+        .filter-chip svg { width: 16px; height: 16px; }
+        .filter-results { margin-top: 12px; padding: 8px 12px; background: #f9fafb; border-radius: 6px; font-size: 0.875rem; color: #6b7280; }
+        .filter-results strong { color: #1f2937; }
+        .server-box.highlighted { animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4); }
+        .server-box.dimmed { opacity: 0.3; }
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2); } }
+		.legend-box { margin-top: 24px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; }
+        .legend-title { font-weight: 600; margin-bottom: 8px; }
+        .legend-items { display: flex; gap: 24px; font-size: 0.875rem; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .server-list-box { margin-top: 24px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; }
+        .server-list-title { font-weight: 600; margin-bottom: 16px; font-size: 1.125rem; color: #1f2937; }
+        .server-table { width: 100%; border-collapse: collapse; }
+        .server-table th { background-color: #f3f4f6; padding: 12px; text-align: left; font-size: 0.875rem; font-weight: 600; border-bottom: 2px solid #d1d5db; }
+        .server-table td { padding: 10px 12px; font-size: 0.875rem; border-bottom: 1px solid #e5e7eb; }
+        .server-table tr:hover { background-color: #f9fafb; }
+        .power-type-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .power-type-single { background-color: #dbeafe; color: #1e40af; }
+        .power-type-dual { background-color: #d1fae5; color: #065f46; }
+        .balance-indicator { background: white; border-radius: 6px; padding: 8px; margin-top: 8px; color: #1f2937; }
+        .balance-title { font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; text-align: center; }
+        .balance-value { font-size: 0.875rem; font-weight: bold; text-align: center; }
+        .balance-good { color: #10b981; }
+        .balance-warning { color: #f59e0b; }
+        .balance-critical { color: #ef4444; }
+        .balance-details { font-size: 0.65rem; margin-top: 4px; text-align: center; opacity: 0.8; }
+        .btn-optimize { width: 100%; margin-top: 8px; padding: 6px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.3s; }
+        .btn-optimize:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4); }
+        .optimization-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1001; align-items: center; justify-content: center; }
+        .optimization-modal.active { display: flex; }
+        .optimization-content { background: white; border-radius: 12px; box-shadow: 0 20px 25px rgba(0,0,0,0.3); padding: 24px; width: 600px; max-height: 80vh; overflow-y: auto; }
+        .optimization-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .optimization-title { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
+        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+        .comparison-card { background: #f9fafb; border-radius: 8px; padding: 16px; border: 2px solid #e5e7eb; }
+        .comparison-card.optimized { border-color: #10b981; background: #ecfdf5; }
+        .comparison-header { font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; color: #6b7280; text-align: center; }
+        .comparison-header.optimized { color: #10b981; }
+        .phase-comparison { margin-bottom: 8px; font-size: 0.875rem; }
+        .phase-comparison-label { font-weight: 600; display: inline-block; width: 60px; }
+        .balance-comparison { text-align: center; padding: 12px; background: white; border-radius: 6px; margin-top: 12px; }
+        .balance-comparison-value { font-size: 1.25rem; font-weight: bold; }
+        .suggestions-list { background: #fffbeb; border: 2px solid #fbbf24; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .suggestions-title { font-size: 1rem; font-weight: 600; color: #92400e; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .suggestion-item { background: white; border-radius: 6px; padding: 12px; margin-bottom: 8px; border-left: 4px solid #fbbf24; font-size: 0.875rem; line-height: 1.5; }
+        .suggestion-arrow { color: #10b981; font-weight: bold; margin: 0 4px; }
+        .no-suggestions { text-align: center; color: #10b981; font-weight: 600; padding: 20px; }
+        .optimization-buttons { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-apply-optimization { flex: 1; padding: 12px 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.3s; }
+        .btn-apply-optimization:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(16, 185, 129, 0.4); }
+        .btn-close-optimization { flex: 1; padding: 12px 24px; background: #e5e7eb; color: #374151; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 1rem; }
+        .btn-close-optimization:hover { background: #d1d5db; }
+        .license-box { margin-top: 24px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 16px; text-align: center; border-top: 2px solid #3b82f6; }
+        .license-text { font-size: 0.875rem; color: #6b7280; margin-bottom: 8px; }
+        .license-author { font-weight: 600; color: #1f2937; font-size: 0.875rem; }
+        .license-cc { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; color: #6b7280; font-size: 0.75rem; }
+        .btn-print { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background-color: #3b82f6; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .btn-print:hover { background-color: #2563eb; }
+        .btn-print-all { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background-color: #8b5cf6; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: 12px; }
+        .btn-print-all:hover { background-color: #7c3aed; }
+        .btn-save { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background-color: #10b981; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: 12px; }
+        .btn-save:hover { background-color: #059669; }
+        .btn-load { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background-color: #f59e0b; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: 12px; }
+        .btn-load:hover { background-color: #d97706; }
+        .btn-undo, .btn-redo { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background-color: #6b7280; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: 12px; }
+        .btn-undo:hover:not(:disabled) { background-color: #4b5563; }
+        .btn-redo:hover:not(:disabled) { background-color: #4b5563; }
+        .btn-undo:disabled, .btn-redo:disabled { opacity: 0.5; cursor: not-allowed; }
+        .undo-redo-controls { display: inline-flex; gap: 8px; margin-left: 12px; }
+        .history-tooltip { position: relative; }
+        .history-tooltip .tooltiptext { visibility: hidden; width: 200px; background-color: #1f2937; color: #fff; text-align: center; border-radius: 6px; padding: 8px; position: absolute; z-index: 1000; bottom: 125%; left: 50%; margin-left: -100px; opacity: 0; transition: opacity 0.3s; font-size: 0.75rem; }
+        .history-tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
+        .history-tooltip .tooltiptext::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #1f2937 transparent transparent transparent; }
+        .file-input-hidden { display: none; }
+        .text-center { text-align: center; }
+        .alert { font-size: 0.75rem; margin-top: 4px; font-weight: 600; }
+        .alert-red { color: #fca5a5; }
+        .alert-yellow { color: #fde047; }
+        .pdu-type-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 600; margin-left: 8px; }
+        .pdu-type-3f { background-color: #dbeafe; color: #1e40af; }
+        .pdu-type-1f { background-color: #fef3c7; color: #92400e; }
+        
+        /* Tablet Support - mantiene layout a 3 colonne */
+        @media (max-width: 1200px) and (min-width: 901px) {
+            body { padding: 12px; }
+            .container { max-width: 100%; }
+            .main-title-input { font-size: 1.5rem; max-width: 400px; padding: 10px; }
+            .rack-size-select { font-size: 1rem; padding: 10px 12px; }
+            .grid-layout { gap: 8px; }
+            .col-2 { grid-column: span 2; min-width: 180px; }
+            .col-4 { grid-column: span 4; min-width: 280px; }
+            .col-1-spacer { grid-column: span 1; min-width: 8px; }
+        }
+		/* Tablet piccoli - passa a layout verticale solo sotto 900px */
+        @media (max-width: 900px) {
+            body { padding: 8px; }
+            .container { max-width: 100%; }
+            .header-section { gap: 12px; }
+            .main-title-input { font-size: 1.25rem; max-width: 100%; padding: 8px; }
+            .rack-size-select { font-size: 0.9rem; padding: 8px 10px; }
+            .grid-layout { grid-template-columns: 1fr; gap: 12px; }
+            .col-2, .col-4, .col-1-spacer { grid-column: span 1; max-height: none; }
+            .col-1-spacer { display: none; }
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 8px; }
+            .header-section { flex-direction: column; gap: 12px; }
+            .lang-switcher { position: static; transform: none; margin-bottom: 8px; }
+            .main-title-input { font-size: 1.25rem; max-width: 100%; padding: 8px; }
+            .rack-size-select { font-size: 0.9rem; padding: 8px 10px; width: 100%; }
+            .rack-tabs { flex-direction: column; align-items: stretch; }
+            .rack-tab { width: 100%; text-align: center; }
+            .btn-add-rack { width: 100%; }
+            .summary-grid { grid-template-columns: 1fr; }
+            .search-filter-box { padding: 12px; }
+            .search-bar { flex-direction: column; }
+            .search-input-wrapper { min-width: 100%; }
+            .filter-chips { justify-content: center; }
+            .filter-chip { font-size: 0.75rem; padding: 5px 10px; }
+        }
+        
+        @media print { 
+            .no-print { display: none !important; }
+            body { padding: 0; margin: 0; }
+            .container { max-width: 100%; margin: 0; padding: 5mm; }
+            .header-section { margin-bottom: 3mm; }
+            .grid-layout { gap: 3mm; display: grid; grid-template-columns: repeat(12, 1fr); }
+            .col-2 { max-height: none; overflow: visible; }
+            .config-panel { display: none; }
+            .search-filter-box { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-section">
+            <div class="lang-switcher no-print" onclick="toggleLanguage()">
+                <span class="lang-flag active" id="flag-it">IT</span>
+                <span class="lang-flag" id="flag-en">EN</span>
+            </div>
+            <input type="text" class="main-title-input" value="Gestione Rack con PDU" maxlength="40" onchange="updateMainTitle(this.value)">
+            <select class="rack-size-select" id="rackSizeSelect" onchange="changeRackSize(this.value)">
+                <option value="42">42U</option>
+                <option value="48">48U</option>
+            </select>
+        </div>
+        
+        <div class="grid-layout">
+            <div class="col-2" id="pdu-left" style="overflow: visible !important; max-height: none !important;"></div>
+            <div class="col-1-spacer"></div>
+            <div class="col-4"></div>
+            <div class="col-1-spacer"></div>
+            <div class="col-2" id="pdu-right" style="overflow: visible !important; max-height: none !important;"></div>
+            <div class="col-2" id="config-panel" style="overflow: visible !important; max-height: none !important;">
+                <div class="config-panel">
+                    <div class="config-header">
+                        <h3 class="config-title" data-i18n="serverConfig">Configurazione Server</h3>
+                    </div>
+                    <div class="text-center" style="color: #6b7280;" data-i18n="selectServerToConfig">Seleziona un server per configurarlo</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="server-list-box" id="serverListBox">
+            <h3 class="server-list-title" data-i18n="serverListTitle">Elenco Server e Collegamenti</h3>
+            <div id="serverListContent"></div>
+        </div>
+        
+        <div class="legend-box no-print">
+            <h3 class="legend-title" data-i18n="legend">Legenda</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    <span data-i18n="singlePower">Alimentazione Singola</span>
+                </div>
+                <div class="legend-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    <span data-i18n="dualPower">Alimentazione Duale (Ridondante)</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center no-print" style="margin-top: 24px;">
+            <button class="btn-print" onclick="printCurrentRack()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                <span data-i18n="printCurrentRack">Stampa Rack Corrente</span>
+            </button>
+            <button class="btn-print-all" onclick="printAllRacks()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                <span data-i18n="printAllRacks">Stampa Tutti i Rack</span>
+            </button>
+            <div class="undo-redo-controls">
+                <button class="btn-undo history-tooltip" id="undoBtn" onclick="undo()" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path></svg>
+                    <span data-i18n="undo">Annulla</span>
+                    <span class="tooltiptext" id="undoTooltip">Ctrl+Z</span>
+                </button>
+                <button class="btn-redo history-tooltip" id="redoBtn" onclick="redo()" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"></path></svg>
+                    <span data-i18n="redo">Ripeti</span>
+                    <span class="tooltiptext" id="redoTooltip">Ctrl+Y</span>
+                </button>
+            </div>
+            <button class="btn-save" onclick="saveConfiguration()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                <span data-i18n="downloadConfig">Scarica Configurazione</span>
+            </button>
+            <input type="file" id="fileInput" class="file-input-hidden" accept=".json" onchange="loadConfiguration(event)">
+            <button class="btn-load" onclick="document.getElementById('fileInput').click()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span data-i18n="loadConfig">Carica Configurazione</span>
+            </button>
+        </div>
+        
+        <div class="license-box">
+            <p class="license-text" data-i18n="licenseText">Quest'opera è distribuita con Doppia Licenza (Dual License)</p>
+            <p class="license-author">© 2025 Roberto Benassi</p>
+            <div class="license-cc" style="flex-direction: column; gap: 4px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    <span><strong data-i18n="nonCommercialUse">Uso Non Commerciale:</strong> <span data-i18n="gplLicense">GPL-3.0 (gratuito e open source)</span></span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                        <path d="M12 18V6"></path>
+                    </svg>
+                    <span><strong data-i18n="commercialUse">Uso Commerciale:</strong> <span data-i18n="contactAuthor">Contattare l'autore per licenza commerciale</span></span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <a href="mailto:info@robertobenassi.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">info@robertobenassi.com</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal" id="addServerModal">
+        <div class="modal-content">
+            <h3 class="modal-title" data-i18n="addNewServer">Aggiungi Nuovo Server</h3>
+            <div id="addServerForm"></div>
+        </div>
+    </div>
+
+    <div class="optimization-modal" id="optimizationModal">
+        <div class="optimization-content">
+            <div class="optimization-header">
+                <span style="font-size: 2rem;">🤖</span>
+                <h3 class="optimization-title" data-i18n="balanceOptimization">Ottimizzazione Bilanciamento</h3>
+            </div>
+            <div id="optimizationContent"></div>
+        </div>
+    </div>
+
+    <script>
+	const translations = {
+            it: {
+                mainTitle: 'Gestione Rack con PDU',
+                serverConfig: 'Configurazione Server',
+                selectServerToConfig: 'Seleziona un server per configurarlo',
+                serverListTitle: 'Elenco Server e Collegamenti',
+                legend: 'Legenda',
+                singlePower: 'Alimentazione Singola',
+                dualPower: 'Alimentazione Duale (Ridondante)',
+                printPDF: 'Stampa PDF',
+                printCurrentRack: 'Stampa Rack Corrente',
+                printAllRacks: 'Stampa Tutti i Rack',
+                undo: 'Annulla',
+                redo: 'Ripeti',
+                searchAndFilters: 'Ricerca e Filtri',
+                searchPlaceholder: 'Cerca server per nome...',
+                filterAll: 'Tutti',
+                filterDual: 'Alimentazione Duale',
+                filterSingle: 'Alimentazione Singola',
+                filterLeftPDU: 'PDU Sinistra',
+                filterRightPDU: 'PDU Destra',
+                filterNoPower: 'Senza Alimentazione',
+                foundServers: 'Trovati',
+                servers: 'server',
+                noServersFound: 'Nessun server trovato',
+                downloadConfig: 'Scarica Configurazione',
+                loadConfig: 'Carica Configurazione',
+                licenseText: 'Quest\'opera è distribuita con Doppia Licenza (Dual License)',
+                nonCommercialUse: 'Uso Non Commerciale:',
+                gplLicense: 'GPL-3.0 (gratuito e open source)',
+                commercialUse: 'Uso Commerciale:',
+                contactAuthor: 'Contattare l\'autore per licenza commerciale',
+                addNewServer: 'Aggiungi Nuovo Server',
+                balanceOptimization: 'Ottimizzazione Bilanciamento',
+                addRack: 'Aggiungi Rack',
+                globalSummary: '📊 Riepilogo Globale',
+                totalRacks: 'Totale Rack',
+                totalServers: 'Totale Server',
+                dual: 'Dual',
+                single: 'Single',
+                totalPower: 'Potenza Totale',
+                rackOccupancy: 'Occupazione Rack',
+                used: 'usate',
+                total: 'totali',
+                pduLeft: 'PDU Sinistra',
+                pduRight: 'PDU Destra',
+                breaker: 'Breaker',
+                current: 'Corrente',
+                type: 'Tipo',
+                threePhase: 'Trifase',
+                singlePhase: 'Monofase',
+                phase: 'Fase',
+                maxPhaseLoad: 'Carico Max Fase',
+                generalOverload: '⚠ SOVRACCARICO GENERALE!',
+                backupMode: 'ℹ️ PDU in modalità backup',
+                bothPDUsOff: '⚠ ENTRAMBE LE PDU SPENTE!',
+                pduOff: 'PDU SPENTA',
+                noActiveLoad: 'Nessun carico attivo',
+                breakersPerPhase: 'Interruttori per fase',
+                breakerCurrent: 'Corrente interruttori',
+                overload: '⚠ Sovraccarico!',
+                phaseBalance: '⚖️ Bilanciamento Fasi',
+                imbalance: 'Sbilanciamento',
+                optimizationSuggestions: '💡 Suggerimenti di ottimizzazione',
+                excellent: 'Ottimo',
+                good: 'Buono',
+                acceptable: 'Accettabile',
+                mediocre: 'Mediocre',
+                critical: 'Critico',
+                serverName: 'Nome Server',
+                position: 'Posizione (U)',
+                positionHelp: 'Da quale U parte il server',
+                height: 'Altezza (U)',
+                power: 'Potenza (W)',
+                dualPowerRedundant: 'Alimentazione Duale (Ridondante)',
+                powerSupply: 'PDU di Alimentazione',
+                circuitBreaker: 'Interruttore',
+                cancel: 'Annulla',
+                add: 'Aggiungi',
+                addServer: 'Aggiungi Server',
+                deleteServer: 'Elimina Server',
+                current2: 'Attuale',
+                optimized: 'Ottimizzato',
+                suggestedActions: '💡 Azioni consigliate',
+                moveFrom: 'Sposta da',
+                applyOptimization: '✨ Applica ottimizzazione',
+                alreadyOptimal: '✅ Il bilanciamento è già ottimale!',
+                noChangesNeeded: 'Non sono necessarie modifiche.',
+                close: 'Chiudi',
+                server: 'Server',
+                powerType: 'Tipo',
+                connections: 'Collegamenti',
+                dualType: 'Duale',
+                singleType: 'Singola',
+                noServersConfigured: 'Nessun server configurato',
+                invalidPosition: 'Posizione non valida: lo spazio è già occupato o fuori dal rack!',
+                cannotDeleteLastRack: 'Non puoi eliminare l\'ultimo rack!',
+                confirmDeleteRack: 'Sei sicuro di voler eliminare',
+                allServersWillBeDeleted: 'Tutti i server verranno eliminati.',
+                noServerSelected: 'Nessun server selezionato',
+                confirmDeleteServer: 'Sei sicuro di voler eliminare',
+                invalidFile: 'File non valido o formato non riconosciuto!',
+                confirmLoadConfig: 'Sei sicuro di voler caricare questa configurazione? I dati attuali verranno sostituiti.',
+                configLoadedSuccess: 'Configurazione caricata con successo!',
+                fileReadError: 'Errore durante la lettura del file. Assicurati che sia un file JSON valido.',
+                optimizationApplied: '✨ Ottimizzazione applicata con successo!',
+                serversReconfigured: 'server riconfigurati.'
+            },
+            en: {
+                mainTitle: 'Rack PDU Management',
+                serverConfig: 'Server Configuration',
+                selectServerToConfig: 'Select a server to configure it',
+                serverListTitle: 'Server List and Connections',
+                legend: 'Legend',
+                singlePower: 'Single Power Supply',
+                dualPower: 'Dual Power Supply (Redundant)',
+                printPDF: 'Print PDF',
+                printCurrentRack: 'Print Current Rack',
+                printAllRacks: 'Print All Racks',
+                undo: 'Undo',
+                redo: 'Redo',
+                searchAndFilters: 'Search and Filters',
+                searchPlaceholder: 'Search server by name...',
+                filterAll: 'All',
+                filterDual: 'Dual Power',
+                filterSingle: 'Single Power',
+                filterLeftPDU: 'Left PDU',
+                filterRightPDU: 'Right PDU',
+                filterNoPower: 'No Power',
+                foundServers: 'Found',
+                servers: 'servers',
+                noServersFound: 'No servers found',
+                downloadConfig: 'Download Configuration',
+                loadConfig: 'Load Configuration',
+                licenseText: 'This work is distributed under Dual License',
+                nonCommercialUse: 'Non-Commercial Use:',
+                gplLicense: 'GPL-3.0 (free and open source)',
+                commercialUse: 'Commercial Use:',
+                contactAuthor: 'Contact author for commercial license',
+                addNewServer: 'Add New Server',
+                balanceOptimization: 'Balance Optimization',
+                addRack: 'Add Rack',
+                globalSummary: '📊 Global Summary',
+                totalRacks: 'Total Racks',
+                totalServers: 'Total Servers',
+                dual: 'Dual',
+                single: 'Single',
+                totalPower: 'Total Power',
+                rackOccupancy: 'Rack Occupancy',
+                used: 'used',
+                total: 'total',
+                pduLeft: 'Left PDU',
+                pduRight: 'Right PDU',
+                breaker: 'Breaker',
+                current: 'Current',
+                type: 'Type',
+                threePhase: 'Three-phase',
+                singlePhase: 'Single-phase',
+                phase: 'Phase',
+                maxPhaseLoad: 'Max Phase Load',
+                generalOverload: '⚠ GENERAL OVERLOAD!',
+                backupMode: 'ℹ️ PDU in backup mode',
+                bothPDUsOff: '⚠ BOTH PDUs OFF!',
+                pduOff: 'PDU OFF',
+                noActiveLoad: 'No active load',
+                breakersPerPhase: 'Breakers per phase',
+                breakerCurrent: 'Breaker current',
+                overload: '⚠ Overload!',
+                phaseBalance: '⚖️ Phase Balance',
+                imbalance: 'Imbalance',
+                optimizationSuggestions: '💡 Optimization suggestions',
+                excellent: 'Excellent',
+                good: 'Good',
+                acceptable: 'Acceptable',
+                mediocre: 'Mediocre',
+                critical: 'Critical',
+                serverName: 'Server Name',
+                position: 'Position (U)',
+                positionHelp: 'From which U the server starts',
+                height: 'Height (U)',
+                power: 'Power (W)',
+                dualPowerRedundant: 'Dual Power Supply (Redundant)',
+                powerSupply: 'Power Supply PDU',
+                circuitBreaker: 'Circuit Breaker',
+                cancel: 'Cancel',
+                add: 'Add',
+                addServer: 'Add Server',
+                deleteServer: 'Delete Server',
+                current2: 'Current',
+                optimized: 'Optimized',
+                suggestedActions: '💡 Suggested actions',
+                moveFrom: 'Move from',
+                applyOptimization: '✨ Apply optimization',
+                alreadyOptimal: '✅ Balance is already optimal!',
+                noChangesNeeded: 'No changes needed.',
+                close: 'Close',
+                server: 'Server',
+                powerType: 'Type',
+                connections: 'Connections',
+                dualType: 'Dual',
+                singleType: 'Single',
+                noServersConfigured: 'No servers configured',
+                invalidPosition: 'Invalid position: space is already occupied or outside the rack!',
+                cannotDeleteLastRack: 'You cannot delete the last rack!',
+                confirmDeleteRack: 'Are you sure you want to delete',
+                allServersWillBeDeleted: 'All servers will be deleted.',
+                noServerSelected: 'No server selected',
+                confirmDeleteServer: 'Are you sure you want to delete',
+                invalidFile: 'Invalid file or unrecognized format!',
+                confirmLoadConfig: 'Are you sure you want to load this configuration? Current data will be replaced.',
+                configLoadedSuccess: 'Configuration loaded successfully!',
+                fileReadError: 'Error reading file. Make sure it is a valid JSON file.',
+                optimizationApplied: '✨ Optimization applied successfully!',
+                serversReconfigured: 'servers reconfigured.'
+            }
+        };
+
+        let currentLang = 'it';
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'it' ? 'en' : 'it';
+            document.getElementById('flag-it').classList.toggle('active');
+            document.getElementById('flag-en').classList.toggle('active');
+            document.documentElement.lang = currentLang;
+            updateAllTranslations();
+            render();
+        }
+
+        function updateAllTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = t(key);
+            });
+            
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                el.placeholder = t(key);
+            });
+        }
+
+        const state = {
+            mainTitle: 'Gestione Rack con PDU',
+            currentRackId: 1,
+            racks: [{
+                id: 1,
+                rackTitle: 'Rack 1',
+                rackSize: 42,
+                servers: [],
+                selectedServer: null,
+                pduLeft: { name: 'PDU Sinistra', type: '3F', mainBreaker: 32, singlePhase: 'L1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 },
+                pduRight: { name: 'PDU Destra', type: '3F', mainBreaker: 32, singlePhase: 'R1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 }
+            }],
+            pduConfig: {
+                left: {
+                    phases: [
+                        { id: 'L1', name: 'L1', color: 'red' },
+                        { id: 'L2', name: 'L2', color: 'yellow' },
+                        { id: 'L3', name: 'L3', color: 'blue' }
+                    ],
+                    breakers: [
+                        { id: 'LB1', name: 'C1', phase: 'L1', maxCurrent: 10 },
+                        { id: 'LB2', name: 'C2', phase: 'L1', maxCurrent: 10 },
+                        { id: 'LB3', name: 'C3', phase: 'L2', maxCurrent: 10 },
+                        { id: 'LB4', name: 'C4', phase: 'L2', maxCurrent: 10 },
+                        { id: 'LB5', name: 'C5', phase: 'L3', maxCurrent: 10 },
+                        { id: 'LB6', name: 'C6', phase: 'L3', maxCurrent: 10 }
+                    ]
+                },
+                right: {
+                    phases: [
+                        { id: 'R1', name: 'L1', color: 'red' },
+                        { id: 'R2', name: 'L2', color: 'yellow' },
+                        { id: 'R3', name: 'L3', color: 'blue' }
+                    ],
+                    breakers: [
+                        { id: 'RB1', name: 'C1', phase: 'R1', maxCurrent: 10 },
+                        { id: 'RB2', name: 'C2', phase: 'R1', maxCurrent: 10 },
+                        { id: 'RB3', name: 'C3', phase: 'R2', maxCurrent: 10 },
+                        { id: 'RB4', name: 'C4', phase: 'R2', maxCurrent: 10 },
+                        { id: 'RB5', name: 'C5', phase: 'R3', maxCurrent: 10 },
+                        { id: 'RB6', name: 'C6', phase: 'R3', maxCurrent: 10 }
+                    ]
+                }
+            }
+        };
+
+        const history = {
+            past: [],
+            future: [],
+            maxHistory: 50
+        };
+
+        const searchFilter = {
+            searchTerm: '',
+            activeFilter: 'all',
+            matchedServers: [],
+            isCollapsed: true
+        };
+		function saveStateToHistory() {
+            var stateCopy = JSON.parse(JSON.stringify({
+                mainTitle: state.mainTitle,
+                currentRackId: state.currentRackId,
+                racks: state.racks
+            }));
+            
+            history.past.push(stateCopy);
+            
+            if (history.past.length > history.maxHistory) {
+                history.past.shift();
+            }
+            
+            history.future = [];
+            updateUndoRedoButtons();
+        }
+
+        function undo() {
+            if (history.past.length === 0) return;
+            
+            var currentState = JSON.parse(JSON.stringify({
+                mainTitle: state.mainTitle,
+                currentRackId: state.currentRackId,
+                racks: state.racks
+            }));
+            
+            history.future.push(currentState);
+            var previousState = history.past.pop();
+            
+            state.mainTitle = previousState.mainTitle;
+            state.currentRackId = previousState.currentRackId;
+            state.racks = previousState.racks;
+            
+            updateUndoRedoButtons();
+            render();
+        }
+
+        function redo() {
+            if (history.future.length === 0) return;
+            
+            var currentState = JSON.parse(JSON.stringify({
+                mainTitle: state.mainTitle,
+                currentRackId: state.currentRackId,
+                racks: state.racks
+            }));
+            
+            history.past.push(currentState);
+            var nextState = history.future.pop();
+            
+            state.mainTitle = nextState.mainTitle;
+            state.currentRackId = nextState.currentRackId;
+            state.racks = nextState.racks;
+            
+            updateUndoRedoButtons();
+            render();
+        }
+
+        function updateUndoRedoButtons() {
+            var undoBtn = document.getElementById('undoBtn');
+            var redoBtn = document.getElementById('redoBtn');
+            
+            if (undoBtn) {
+                undoBtn.disabled = history.past.length === 0;
+            }
+            if (redoBtn) {
+                redoBtn.disabled = history.future.length === 0;
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+            }
+            else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                e.preventDefault();
+                redo();
+            }
+            else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                var searchInput = document.getElementById('searchInput');
+                if (searchInput) {
+                    if (searchFilter.isCollapsed) {
+                        toggleSearchFilter();
+                    }
+                    searchInput.focus();
+                }
+            }
+        });
+
+        function handleSearch(searchTerm) {
+            searchFilter.searchTerm = searchTerm.toLowerCase();
+            
+            var clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                if (searchTerm) {
+                    clearBtn.classList.add('visible');
+                } else {
+                    clearBtn.classList.remove('visible');
+                }
+            }
+            
+            applySearchAndFilter();
+        }
+
+        function clearSearch() {
+            var searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = '';
+            }
+            searchFilter.searchTerm = '';
+            var clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                clearBtn.classList.remove('visible');
+            }
+            applySearchAndFilter();
+        }
+
+        function setFilter(filterType) {
+            searchFilter.activeFilter = filterType;
+            
+            document.querySelectorAll('.filter-chip').forEach(function(chip) {
+                chip.classList.remove('active');
+            });
+            
+            var activeChip = null;
+            switch(filterType) {
+                case 'all': activeChip = document.getElementById('filterAll'); break;
+                case 'dual': activeChip = document.getElementById('filterDual'); break;
+                case 'single': activeChip = document.getElementById('filterSingle'); break;
+                case 'left': activeChip = document.getElementById('filterLeftPDU'); break;
+                case 'right': activeChip = document.getElementById('filterRightPDU'); break;
+                case 'nopower': activeChip = document.getElementById('filterNoPower'); break;
+            }
+            
+            if (activeChip) {
+                activeChip.classList.add('active');
+            }
+            
+            applySearchAndFilter();
+        }
+
+        function toggleSearchFilter() {
+            searchFilter.isCollapsed = !searchFilter.isCollapsed;
+            var content = document.querySelector('.search-filter-content');
+            var toggleBtn = document.querySelector('.search-toggle-btn');
+            
+            if (content) {
+                if (searchFilter.isCollapsed) {
+                    content.classList.add('collapsed');
+                } else {
+                    content.classList.remove('collapsed');
+                }
+            }
+            
+            if (toggleBtn) {
+                if (searchFilter.isCollapsed) {
+                    toggleBtn.classList.add('collapsed');
+                } else {
+                    toggleBtn.classList.remove('collapsed');
+                }
+            }
+        }
+
+        function applySearchAndFilter() {
+            var rack = getCurrentRack();
+            searchFilter.matchedServers = [];
+            
+            for (var i = 0; i < rack.servers.length; i++) {
+                var server = rack.servers[i];
+                var matches = true;
+                
+                if (searchFilter.searchTerm) {
+                    if (!server.name.toLowerCase().includes(searchFilter.searchTerm)) {
+                        matches = false;
+                    }
+                }
+                
+                if (matches && searchFilter.activeFilter !== 'all') {
+                    switch(searchFilter.activeFilter) {
+                        case 'dual':
+                            if (!server.dualPower) matches = false;
+                            break;
+                        case 'single':
+                            if (server.dualPower) matches = false;
+                            break;
+                        case 'left':
+                            if (server.dualPower) {
+                                matches = true;
+                            } else if (server.pduSide !== 'left') {
+                                matches = false;
+                            }
+                            break;
+                        case 'right':
+                            if (server.dualPower) {
+                                matches = true;
+                            } else if (server.pduSide !== 'right') {
+                                matches = false;
+                            }
+                            break;
+                        case 'nopower':
+                            var powerStatus = getServerPowerStatus(server);
+                            if (powerStatus !== 'none') matches = false;
+                            break;
+                    }
+                }
+                
+                if (matches) {
+                    searchFilter.matchedServers.push(server.id);
+                }
+            }
+            
+            updateFilterResults();
+            renderRack();
+        }
+
+        function updateFilterResults() {
+            var resultsDiv = document.getElementById('filterResults');
+            if (!resultsDiv) return;
+            
+            var rack = getCurrentRack();
+            
+            if (searchFilter.searchTerm || searchFilter.activeFilter !== 'all') {
+                var count = searchFilter.matchedServers.length;
+                var total = rack.servers.length;
+                
+                if (count === 0) {
+                    resultsDiv.innerHTML = '<strong>' + t('noServersFound') + '</strong>';
+                } else if (count === total) {
+                    resultsDiv.innerHTML = '<strong>' + t('foundServers') + ':</strong> ' + count + ' ' + t('servers');
+                } else {
+                    resultsDiv.innerHTML = '<strong>' + t('foundServers') + ':</strong> ' + count + ' / ' + total + ' ' + t('servers');
+                }
+                resultsDiv.style.display = 'block';
+            } else {
+                resultsDiv.style.display = 'none';
+            }
+        }
+
+        function getServerSearchClass(server) {
+            if (searchFilter.searchTerm || searchFilter.activeFilter !== 'all') {
+                if (searchFilter.matchedServers.indexOf(server.id) !== -1) {
+                    return 'highlighted';
+                } else {
+                    return 'dimmed';
+                }
+            }
+            return '';
+        }
+
+        function getCurrentRack() {
+            return state.racks.find(r => r.id === state.currentRackId);
+        }
+
+        function addNewRack() {
+            saveStateToHistory();
+            const newId = Math.max(...state.racks.map(r => r.id)) + 1;
+            state.racks.push({
+                id: newId,
+                rackTitle: 'Rack ' + newId,
+                rackSize: 42,
+                servers: [],
+                selectedServer: null,
+                pduLeft: { name: t('pduLeft'), type: '3F', mainBreaker: 32, singlePhase: 'L1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 },
+                pduRight: { name: t('pduRight'), type: '3F', mainBreaker: 32, singlePhase: 'R1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 }
+            });
+            state.currentRackId = newId;
+            render();
+        }
+
+        function removeRack(rackId, event) {
+            if (event) event.stopPropagation();
+            if (state.racks.length <= 1) {
+                alert(t('cannotDeleteLastRack'));
+                return;
+            }
+            const rack = state.racks.find(r => r.id === rackId);
+            if (!confirm(t('confirmDeleteRack') + ' "' + rack.rackTitle + '"? ' + t('allServersWillBeDeleted'))) {
+                return;
+            }
+            saveStateToHistory();
+            state.racks = state.racks.filter(r => r.id !== rackId);
+            if (state.currentRackId === rackId) {
+                state.currentRackId = state.racks[0].id;
+            }
+            render();
+        }
+
+        function switchRack(rackId) {
+            state.currentRackId = rackId;
+            clearSearch();
+            setFilter('all');
+            render();
+        }
+
+        function closeConfigPanel() {
+            var rack = getCurrentRack();
+            rack.selectedServer = null;
+            render();
+        }
+		function renderRackTabs() {
+            var html = '<div class="rack-tabs no-print">';
+            for (var i = 0; i < state.racks.length; i++) {
+                var rack = state.racks[i];
+                var isActive = rack.id === state.currentRackId;
+                html += '<div class="rack-tab ' + (isActive ? 'active' : '') + '" onclick="switchRack(' + rack.id + ')">';
+                html += rack.rackTitle;
+                if (state.racks.length > 1) {
+                    html += ' <button class="btn-remove-rack" onclick="removeRack(' + rack.id + ', event)">✕</button>';
+                }
+                html += '</div>';
+            }
+            html += '<button class="btn-add-rack" onclick="addNewRack()">+ ' + t('addRack') + '</button>';
+            html += '</div>';
+            
+            var container = document.querySelector('.container');
+            var existingTabs = container.querySelector('.rack-tabs');
+            if (existingTabs) {
+                existingTabs.outerHTML = html;
+            } else {
+                var headerSection = container.querySelector('.header-section');
+                headerSection.insertAdjacentHTML('afterend', html);
+            }
+        }
+
+        function calculateGlobalSummary() {
+            var totalServers = 0, totalPower = 0, totalDualPower = 0, totalSinglePower = 0;
+            var totalRackUnits = 0, usedRackUnits = 0;
+            var phaseLoads = { L1: 0, L2: 0, L3: 0 };
+            
+            for (var i = 0; i < state.racks.length; i++) {
+                var rack = state.racks[i];
+                totalServers += rack.servers.length;
+                totalRackUnits += rack.rackSize;
+                
+                for (var j = 0; j < rack.servers.length; j++) {
+                    var server = rack.servers[j];
+                    totalPower += server.power;
+                    usedRackUnits += server.height;
+                    if (server.dualPower) totalDualPower++;
+                    else totalSinglePower++;
+                    
+                    var leftOn = rack.pduLeft.on;
+                    var rightOn = rack.pduRight.on;
+                    
+                    if (server.dualPower) {
+                        if (leftOn && rightOn) {
+                            var powerPerSide = server.power / 2;
+                            var mappedLeftPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                            var mappedRightPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                            
+                            if (mappedLeftPhase === 'L1' || mappedLeftPhase === 'R1') phaseLoads.L1 += powerPerSide;
+                            else if (mappedLeftPhase === 'L2' || mappedLeftPhase === 'R2') phaseLoads.L2 += powerPerSide;
+                            else if (mappedLeftPhase === 'L3' || mappedLeftPhase === 'R3') phaseLoads.L3 += powerPerSide;
+                            
+                            if (mappedRightPhase === 'R1') phaseLoads.L1 += powerPerSide;
+                            else if (mappedRightPhase === 'R2') phaseLoads.L2 += powerPerSide;
+                            else if (mappedRightPhase === 'R3') phaseLoads.L3 += powerPerSide;
+                        } else if (leftOn && !rightOn) {
+                            var mappedPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                            if (mappedPhase === 'L1' || mappedPhase === 'R1') phaseLoads.L1 += server.power;
+                            else if (mappedPhase === 'L2' || mappedPhase === 'R2') phaseLoads.L2 += server.power;
+                            else if (mappedPhase === 'L3' || mappedPhase === 'R3') phaseLoads.L3 += server.power;
+                        } else if (!leftOn && rightOn) {
+                            var mappedPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                            if (mappedPhase === 'R1') phaseLoads.L1 += server.power;
+                            else if (mappedPhase === 'R2') phaseLoads.L2 += server.power;
+                            else if (mappedPhase === 'R3') phaseLoads.L3 += server.power;
+                        }
+                    } else {
+                        var pduOn = server.pduSide === 'left' ? leftOn : rightOn;
+                        if (pduOn) {
+                            var phase = server.pduSide === 'left' ? server.leftPhase : server.rightPhase;
+                            var mappedPhase = getMappedPhase(rack, server.pduSide, phase);
+                            if (mappedPhase === 'L1' || mappedPhase === 'R1') phaseLoads.L1 += server.power;
+                            else if (mappedPhase === 'L2' || mappedPhase === 'R2') phaseLoads.L2 += server.power;
+                            else if (mappedPhase === 'L3' || mappedPhase === 'R3') phaseLoads.L3 += server.power;
+                        }
+                    }
+                }
+            }
+            
+            return {
+                totalRacks: state.racks.length,
+                totalServers: totalServers,
+                totalPower: totalPower,
+                totalDualPower: totalDualPower,
+                totalSinglePower: totalSinglePower,
+                totalRackUnits: totalRackUnits,
+                usedRackUnits: usedRackUnits,
+                freeRackUnits: totalRackUnits - usedRackUnits,
+                occupancyPercent: (usedRackUnits / totalRackUnits * 100).toFixed(1),
+                phaseLoads: phaseLoads
+            };
+        }
+
+        function renderGlobalSummary() {
+            if (state.racks.length <= 1) return '';
+            
+            var summary = calculateGlobalSummary();
+            var html = '<div class="global-summary no-print">';
+            html += '<div class="summary-title">' + t('globalSummary') + '</div>';
+            html += '<div class="summary-grid">';
+            html += '<div class="summary-card"><div class="summary-card-title">' + t('totalRacks') + '</div><div class="summary-card-value">' + summary.totalRacks + '</div></div>';
+            html += '<div class="summary-card"><div class="summary-card-title">' + t('totalServers') + '</div><div class="summary-card-value">' + summary.totalServers + '</div><div class="summary-card-detail">' + t('dual') + ': ' + summary.totalDualPower + ' | ' + t('single') + ': ' + summary.totalSinglePower + '</div></div>';
+            
+            html += '<div class="summary-card" style="border-left-color: #8b5cf6;">';
+            html += '<div class="summary-card-title">' + t('totalPower') + '</div>';
+            html += '<div class="summary-card-value">' + (summary.totalPower / 1000).toFixed(1) + ' kW</div>';
+            html += '<div class="summary-card-detail" style="margin-top: 8px; line-height: 1.4;">';
+            
+            var currentL1 = summary.phaseLoads.L1 / 230;
+            var currentL2 = summary.phaseLoads.L2 / 230;
+            var currentL3 = summary.phaseLoads.L3 / 230;
+            
+            html += '<span style="color: #ef4444; font-weight: 600;">R (L1):</span> ' + (summary.phaseLoads.L1 / 1000).toFixed(2) + ' kW (' + currentL1.toFixed(1) + ' A)<br>';
+            html += '<span style="color: #eab308; font-weight: 600;">S (L2):</span> ' + (summary.phaseLoads.L2 / 1000).toFixed(2) + ' kW (' + currentL2.toFixed(1) + ' A)<br>';
+            html += '<span style="color: #3b82f6; font-weight: 600;">T (L3):</span> ' + (summary.phaseLoads.L3 / 1000).toFixed(2) + ' kW (' + currentL3.toFixed(1) + ' A)';
+            html += '</div></div>';
+            
+            html += '<div class="summary-card"><div class="summary-card-title">' + t('rackOccupancy') + '</div><div class="summary-card-value">' + summary.occupancyPercent + '%</div><div class="summary-card-detail">' + summary.usedRackUnits + 'U ' + t('used') + ' / ' + summary.totalRackUnits + 'U ' + t('total') + '</div></div>';
+            html += '</div></div>';
+            return html;
+        }
+
+        function getPhaseMaxCurrent(side) {
+            var rack = getCurrentRack();
+            return side === 'left' ? rack.pduLeft.mainBreaker : rack.pduRight.mainBreaker;
+        }
+        
+        function getMappedPhase(rack, side, phase) {
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            if (pdu.type === '1F') {
+                return pdu.singlePhase;
+            }
+            return phase;
+        }
+        
+        function getAvailablePhases(rack, side) {
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            var config = side === 'left' ? state.pduConfig.left : state.pduConfig.right;
+            
+            if (pdu.type === '1F') {
+                return config.phases.filter(function(p) { return p.id === pdu.singlePhase; });
+            }
+            return config.phases;
+        }
+        
+        function getAvailableBreakers(rack, side) {
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            var config = side === 'left' ? state.pduConfig.left : state.pduConfig.right;
+            
+            var breakers = [];
+            var breakersPerPhase = pdu.breakersPerPhase || 2;
+            var breakerCurrent = pdu.breakerCurrent || 10;
+            
+            if (pdu.type === '1F') {
+                for (var i = 0; i < breakersPerPhase; i++) {
+                    breakers.push({
+                        id: (side === 'left' ? 'LB' : 'RB') + (i + 1),
+                        name: 'C' + (i + 1),
+                        phase: pdu.singlePhase,
+                        maxCurrent: breakerCurrent
+                    });
+                }
+            } else {
+                var phases = config.phases;
+                for (var i = 0; i < phases.length; i++) {
+                    for (var j = 0; j < breakersPerPhase; j++) {
+                        var breakerNum = i * breakersPerPhase + j + 1;
+                        breakers.push({
+                            id: (side === 'left' ? 'LB' : 'RB') + breakerNum,
+                            name: 'C' + breakerNum,
+                            phase: phases[i].id,
+                            maxCurrent: breakerCurrent
+                        });
+                    }
+                }
+            }
+            
+            return breakers;
+        }
+
+        function calculatePhaseLoad(side, phaseId) {
+            var rack = getCurrentRack();
+            var totalCurrent = 0;
+            var leftOn = rack.pduLeft.on;
+            var rightOn = rack.pduRight.on;
+
+            for (var i = 0; i < rack.servers.length; i++) {
+                var server = rack.servers[i];
+                if (server.dualPower) {
+                    if (leftOn && rightOn) {
+                        if (side === 'left') {
+                            var mappedPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                            if (mappedPhase === phaseId && server.leftBreaker) {
+                                totalCurrent += (server.power / 2) / 230;
+                            }
+                        }
+                        if (side === 'right') {
+                            var mappedPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                            if (mappedPhase === phaseId && server.rightBreaker) {
+                                totalCurrent += (server.power / 2) / 230;
+                            }
+                        }
+                    } else if (leftOn && !rightOn) {
+                        if (side === 'left') {
+                            var mappedPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                            if (mappedPhase === phaseId && server.leftBreaker) {
+                                totalCurrent += server.power / 230;
+                            }
+                        }
+                    } else if (!leftOn && rightOn) {
+                        if (side === 'right') {
+                            var mappedPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                            if (mappedPhase === phaseId && server.rightBreaker) {
+                                totalCurrent += server.power / 230;
+                            }
+                        }
+                    }
+                } else {
+                    if (server.pduSide === side) {
+                        var pduOn = side === 'left' ? leftOn : rightOn;
+                        if (pduOn) {
+                            var phase = side === 'left' ? server.leftPhase : server.rightPhase;
+                            var mappedPhase = getMappedPhase(rack, side, phase);
+                            var breaker = side === 'left' ? server.leftBreaker : server.rightBreaker;
+                            if (breaker && mappedPhase === phaseId) {
+                                totalCurrent += server.power / 230;
+                            }
+                        }
+                    }
+                }
+            }
+            return totalCurrent;
+        }
+
+        function calculateTotalPDULoad(side) {
+            var rack = getCurrentRack();
+            var phases = getAvailablePhases(rack, side);
+            var maxPhaseLoad = 0;
+            for (var i = 0; i < phases.length; i++) {
+                var phaseLoad = calculatePhaseLoad(side, phases[i].id);
+                if (phaseLoad > maxPhaseLoad) {
+                    maxPhaseLoad = phaseLoad;
+                }
+            }
+            return maxPhaseLoad;
+        }
+
+        function calculateBreakerLoad(side, breakerId) {
+            var rack = getCurrentRack();
+            var totalCurrent = 0;
+            var leftOn = rack.pduLeft.on;
+            var rightOn = rack.pduRight.on;
+
+            for (var i = 0; i < rack.servers.length; i++) {
+                var server = rack.servers[i];
+                if (server.dualPower) {
+                    if (leftOn && rightOn) {
+                        if (side === 'left' && server.leftBreaker === breakerId) {
+                            totalCurrent += (server.power / 2) / 230;
+                        }
+                        if (side === 'right' && server.rightBreaker === breakerId) {
+                            totalCurrent += (server.power / 2) / 230;
+                        }
+                    } else if (leftOn && !rightOn) {
+                        if (side === 'left' && server.leftBreaker === breakerId) {
+                            totalCurrent += server.power / 230;
+                        }
+                    } else if (!leftOn && rightOn) {
+                        if (side === 'right' && server.rightBreaker === breakerId) {
+                            totalCurrent += server.power / 230;
+                        }
+                    }
+                } else {
+                    if (server.pduSide === side) {
+                        var pduOn = side === 'left' ? leftOn : rightOn;
+                        if (pduOn) {
+                            var breaker = side === 'left' ? server.leftBreaker : server.rightBreaker;
+                            if (breaker === breakerId) {
+                                totalCurrent += server.power / 230;
+                            }
+                        }
+                    }
+                }
+            }
+            return totalCurrent;
+        }
+		function calculatePhaseBalance(side) {
+            var rack = getCurrentRack();
+            var phases = getAvailablePhases(rack, side);
+            var phaseMaxCurrent = getPhaseMaxCurrent(side);
+            var phaseLoads = [];
+            
+            for (var i = 0; i < phases.length; i++) {
+                var load = calculatePhaseLoad(side, phases[i].id);
+                phaseLoads.push((load / phaseMaxCurrent) * 100);
+            }
+            
+            var sum = 0;
+            for (var i = 0; i < phaseLoads.length; i++) sum += phaseLoads[i];
+            var avgLoad = sum / phaseLoads.length;
+            var maxLoad = Math.max.apply(Math, phaseLoads);
+            var minLoad = Math.min.apply(Math, phaseLoads);
+            var imbalance = maxLoad - minLoad;
+            
+            var variance = 0;
+            for (var i = 0; i < phaseLoads.length; i++) {
+                variance += Math.pow(phaseLoads[i] - avgLoad, 2);
+            }
+            variance /= phaseLoads.length;
+            var stdDev = Math.sqrt(variance);
+            
+            var balanceFactor = 100;
+            if (imbalance > 0) {
+                balanceFactor -= imbalance * 0.8;
+                balanceFactor -= stdDev * 0.5;
+            }
+            balanceFactor = Math.max(0, Math.min(100, balanceFactor));
+            
+            return {
+                balanceFactor: balanceFactor,
+                imbalance: imbalance,
+                avgLoad: avgLoad,
+                maxLoad: maxLoad,
+                minLoad: minLoad,
+                phaseLoads: phaseLoads,
+                stdDev: stdDev
+            };
+        }
+
+        function getBalanceCategory(balanceFactor) {
+            if (balanceFactor >= 85) return 'good';
+            if (balanceFactor >= 70) return 'warning';
+            return 'critical';
+        }
+
+        function getBalanceText(balanceFactor) {
+            if (balanceFactor >= 95) return t('excellent');
+            if (balanceFactor >= 85) return t('good');
+            if (balanceFactor >= 70) return t('acceptable');
+            if (balanceFactor >= 50) return t('mediocre');
+            return t('critical');
+        }
+
+        function getServerPowerStatus(server) {
+            var rack = getCurrentRack();
+            var leftOn = rack.pduLeft.on;
+            var rightOn = rack.pduRight.on;
+            
+            if (server.dualPower) {
+                if (leftOn && rightOn) return 'full';
+                else if (leftOn || rightOn) return 'partial';
+                else return 'none';
+            } else {
+                var pduOn = server.pduSide === 'left' ? leftOn : rightOn;
+                return pduOn ? 'full' : 'none';
+            }
+        }
+        
+        function updatePDUType(side, type) {
+            var rack = getCurrentRack();
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            pdu.type = type;
+            
+            if (type === '1F' && !pdu.singlePhase) {
+                pdu.singlePhase = side === 'left' ? 'L1' : 'R1';
+            }
+            
+            render();
+        }
+        
+        function updatePDUSinglePhase(side, phase) {
+            var rack = getCurrentRack();
+            if (side === 'left') rack.pduLeft.singlePhase = phase;
+            else rack.pduRight.singlePhase = phase;
+            render();
+        }
+        
+        function updatePDUBreakerConfig(side, field, value) {
+            var rack = getCurrentRack();
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            pdu[field] = parseInt(value);
+            render();
+        }
+
+        function renderPDU(side) {
+            var rack = getCurrentRack();
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            var config = side === 'left' ? state.pduConfig.left : state.pduConfig.right;
+            var totalLoad = calculateTotalPDULoad(side);
+            var loadPercent = (totalLoad / pdu.mainBreaker) * 100;
+            var isOverloaded = totalLoad > pdu.mainBreaker;
+
+            var html = '<div class="pdu-display">';
+            html += '<div class="pdu-name"><input type="text" value="' + pdu.name + '" maxlength="15" onchange="updatePDUName(\'' + side + '\', this.value)">';
+            html += '<span class="pdu-type-badge pdu-type-' + (pdu.type || '3F').toLowerCase() + '">' + (pdu.type || '3F') + '</span></div>';
+            html += '<div class="breaker-box ' + (pdu.on ? 'on' : 'off') + '">';
+            html += '<div class="breaker-header"><span class="breaker-title">' + t('breaker') + '</span><div class="breaker-controls">';
+            html += '<button class="btn-power ' + (pdu.on ? 'on' : 'off') + '" onclick="togglePDU(\'' + side + '\')">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>';
+            html += '<button class="btn-settings" onclick="toggleSettings(\'' + side + '\')">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6M12 17v6M5.64 5.64l4.24 4.24M14.12 14.12l4.24 4.24M1 12h6M17 12h6M5.64 18.36l4.24-4.24M14.12 9.88l4.24-4.24"></path></svg>';
+            html += '</button></div></div>';
+
+            if (pdu.showSettings) {
+                html += '<div class="settings-input"><span style="font-size: 0.65rem; white-space: nowrap;">' + t('current') + ':</span><input type="number" min="16" max="63" value="' + pdu.mainBreaker + '" onchange="updateMainBreaker(\'' + side + '\', this.value)"><span style="font-size: 0.75rem;">A</span></div>';
+                
+                html += '<div class="settings-input"><span style="font-size: 0.65rem; white-space: nowrap;">' + t('type') + ':</span><select onchange="updatePDUType(\'' + side + '\', this.value)">';
+                html += '<option value="3F" ' + ((pdu.type || '3F') === '3F' ? 'selected' : '') + '>' + t('threePhase') + '</option>';
+                html += '<option value="1F" ' + (pdu.type === '1F' ? 'selected' : '') + '>' + t('singlePhase') + '</option>';
+                html += '</select></div>';
+                
+                if (pdu.type === '1F') {
+                    html += '<div class="settings-input"><span style="font-size: 0.65rem; white-space: nowrap;">' + t('phase') + ':</span>';
+                    html += '<select style="width: 80px;" onchange="updatePDUSinglePhase(\'' + side + '\', this.value)">';
+                    var phases = side === 'left' ? state.pduConfig.left.phases : state.pduConfig.right.phases;
+                    for (var p = 0; p < phases.length; p++) {
+                        html += '<option value="' + phases[p].id + '" ' + (pdu.singlePhase === phases[p].id ? 'selected' : '') + '>' + phases[p].name + '</option>';
+                    }
+                    html += '</select></div>';
+                }
+                
+                html += '<div class="settings-input"><span style="font-size: 0.65rem; white-space: nowrap;">' + t('breakersPerPhase') + ':</span>';
+                html += '<select style="width: 60px;" onchange="updatePDUBreakerConfig(\'' + side + '\', \'breakersPerPhase\', this.value)">';
+                for (var bp = 1; bp <= 6; bp++) {
+                    html += '<option value="' + bp + '" ' + ((pdu.breakersPerPhase || 2) === bp ? 'selected' : '') + '>' + bp + '</option>';
+                }
+                html += '</select></div>';
+                
+                html += '<div class="settings-input"><span style="font-size: 0.65rem; white-space: nowrap;">' + t('breakerCurrent') + ':</span>';
+                html += '<select style="width: 70px;" onchange="updatePDUBreakerConfig(\'' + side + '\', \'breakerCurrent\', this.value)">';
+                var currents = [6, 10, 16, 20, 25, 32];
+                for (var c = 0; c < currents.length; c++) {
+                    html += '<option value="' + currents[c] + '" ' + ((pdu.breakerCurrent || 10) === currents[c] ? 'selected' : '') + '>' + currents[c] + 'A</option>';
+                }
+                html += '</select></div>';
+            }
+
+            if (pdu.on) {
+                html += '<div class="load-info"><span style="font-size: 0.75rem; white-space: nowrap;">' + t('maxPhaseLoad') + '</span>';
+                html += '<span class="load-value ' + (isOverloaded ? 'alert-red' : '') + '">' + totalLoad.toFixed(1) + 'A/' + pdu.mainBreaker + 'A</span></div>';
+                html += '<div class="progress-bar"><div class="progress-fill ' + (isOverloaded ? 'red' : 'green') + '" style="width: ' + Math.min(loadPercent, 100) + '%"></div></div>';
+                if (isOverloaded) html += '<p class="alert alert-red">' + t('generalOverload') + '</p>';
+                if (rack.pduLeft.on || rack.pduRight.on) {
+                    if ((side === 'left' && !rack.pduRight.on) || (side === 'right' && !rack.pduLeft.on)) {
+                        html += '<p class="alert alert-yellow">' + t('backupMode') + '</p>';
+                    }
+                } else {
+                    html += '<p class="alert alert-yellow">' + t('bothPDUsOff') + '</p>';
+                }
+            } else {
+                html += '<div style="text-align: center; padding: 8px 0;"><p style="font-size: 0.875rem; font-weight: 600;">' + t('pduOff') + '</p>';
+                html += '<p style="font-size: 0.75rem; margin-top: 4px; opacity: 0.75;">' + t('noActiveLoad') + '</p></div>';
+            }
+            html += '</div>';
+
+            var activePhasesToShow = getAvailablePhases(rack, side);
+            
+            for (var i = 0; i < activePhasesToShow.length; i++) {
+                var phase = activePhasesToShow[i];
+                var phaseMaxCurrent = getPhaseMaxCurrent(side);
+                var phaseLoad = calculatePhaseLoad(side, phase.id);
+                var phasePercent = (phaseLoad / phaseMaxCurrent) * 100;
+                var phaseOverload = phaseLoad > phaseMaxCurrent;
+
+                html += '<div class="phase-box ' + (pdu.on ? '' : 'disabled') + '">';
+                html += '<div class="load-info"><span style="font-size: 0.75rem; font-weight: 500;">' + phase.name + '</span>';
+                html += '<span class="load-value ' + (phaseOverload ? 'alert-red' : '') + '" style="color: #374151;">' + (pdu.on ? phaseLoad.toFixed(1) : '0.0') + 'A / ' + phaseMaxCurrent + 'A</span></div>';
+                html += '<div class="progress-bar" style="height: 12px; background-color: #e5e7eb;">';
+                html += '<div class="progress-fill phase-bar-' + phase.color + '" style="width: ' + (pdu.on ? Math.min(phasePercent, 100) : 0) + '%"></div></div>';
+                if (pdu.on && phaseOverload) html += '<p class="alert" style="color: #ef4444;">' + t('overload') + '</p>';
+                html += '</div>';
+            }
+
+            var breakersToShow = getAvailableBreakers(rack, side);
+            
+            html += '<div class="breakers-section ' + (pdu.on ? '' : 'disabled') + '"><h4 class="breakers-title">' + t('circuitBreaker') + ' (' + (pdu.breakerCurrent || 10) + 'A)</h4>';
+            for (var i = 0; i < breakersToShow.length; i++) {
+                var breaker = breakersToShow[i];
+                var breakerLoad = calculateBreakerLoad(side, breaker.id);
+                var breakerPercent = (breakerLoad / breaker.maxCurrent) * 100;
+                var breakerOverload = breakerLoad > breaker.maxCurrent;
+                var phase = null;
+                for (var j = 0; j < config.phases.length; j++) {
+                    if (config.phases[j].id === breaker.phase) {
+                        phase = config.phases[j];
+                        break;
+                    }
+                }
+
+                html += '<div class="breaker-item ' + (pdu.on ? '' : 'disabled') + '">';
+                html += '<div class="load-info"><span style="font-weight: 500;">' + breaker.name + ' (' + phase.name + ')</span>';
+                html += '<span style="font-weight: bold; color: ' + (breakerOverload ? '#ef4444' : '#4b5563') + ';">' + (pdu.on ? breakerLoad.toFixed(1) : '0.0') + 'A</span></div>';
+                html += '<div class="progress-bar" style="height: 8px; background-color: #e5e7eb;">';
+                html += '<div class="progress-fill phase-bar-' + phase.color + '" style="width: ' + (pdu.on ? Math.min(breakerPercent, 100) : 0) + '%"></div></div>';
+                if (pdu.on && breakerOverload) html += '<p class="alert" style="color: #ef4444;">' + t('overload') + '</p>';
+                html += '</div>';
+            }
+            html += '</div>';
+
+            if (pdu.on && (pdu.type === '3F' || !pdu.type)) {
+                var balance = calculatePhaseBalance(side);
+                var category = getBalanceCategory(balance.balanceFactor);
+                var balanceText = getBalanceText(balance.balanceFactor);
+                
+                html += '<div class="balance-indicator">';
+                html += '<div class="balance-title">' + t('phaseBalance') + '</div>';
+                html += '<div class="balance-value balance-' + category + '">' + balance.balanceFactor.toFixed(0) + '% - ' + balanceText + '</div>';
+                html += '<div class="balance-details">' + t('imbalance') + ': ' + balance.imbalance.toFixed(1) + '%</div>';
+                if (balance.balanceFactor < 90) {
+                    html += '<button class="btn-optimize" onclick="openOptimizationModal(\'' + side + '\')">' + t('optimizationSuggestions') + '</button>';
+                }
+                html += '</div>';
+            }
+
+            html += '</div>';
+            document.getElementById('pdu-' + side).innerHTML = html;
+        }
+		function renderRack() {
+            var rack = getCurrentRack();
+            var html = '<div class="rack-container"><div class="rack-header">';
+            html += '<input type="text" class="rack-title-input" value="' + rack.rackTitle + '" maxlength="19" onchange="updateRackTitle(this.value)">';
+            html += '</div><div class="rack-units" id="rack-units-content"></div></div>';
+            document.querySelector('.col-4').innerHTML = html;
+
+            var unitsHtml = '';
+            var occupiedUnits = new Set();
+            for (var i = 0; i < rack.servers.length; i++) {
+                for (var u = rack.servers[i].position; u < rack.servers[i].position + rack.servers[i].height; u++) {
+                    occupiedUnits.add(u);
+                }
+            }
+
+            for (var u = rack.rackSize; u >= 1; u--) {
+                var server = null;
+                for (var i = 0; i < rack.servers.length; i++) {
+                    if (u >= rack.servers[i].position && u < rack.servers[i].position + rack.servers[i].height) {
+                        server = rack.servers[i];
+                        break;
+                    }
+                }
+                
+                if (server && u === server.position + server.height - 1) {
+                    var powerStatus = getServerPowerStatus(server);
+                    var statusClass = '';
+                    if (powerStatus === 'none') statusClass = 'no-power';
+                    else if (powerStatus === 'partial') statusClass = 'partial-power';
+                    
+                    var searchClass = getServerSearchClass(server);
+                    
+                    unitsHtml += '<div class="server-box ' + statusClass + ' ' + searchClass + '" style="height: ' + (server.height * 24) + 'px;" ';
+                    unitsHtml += 'draggable="true" ';
+                    unitsHtml += 'ondragstart="handleDragStart(event, ' + server.id + ')" ';
+                    unitsHtml += 'ondragend="handleDragEnd(event)" ';
+                    unitsHtml += 'onclick="selectServer(' + server.id + ')">';
+                    unitsHtml += '<div class="server-info"><div class="server-name"><span>' + server.name + '</span>';
+                    
+                    if (server.dualPower) {
+                        var leftColor = rack.pduLeft.on ? 'green' : 'red';
+                        unitsHtml += '<svg class="power-icon ' + leftColor + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                        var rightColor = rack.pduRight.on ? 'green' : 'red';
+                        unitsHtml += '<svg class="power-icon ' + rightColor + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                    } else {
+                        var pduOn = server.pduSide === 'left' ? rack.pduLeft.on : rack.pduRight.on;
+                        var iconColor = pduOn ? 'blue' : 'red';
+                        unitsHtml += '<svg class="power-icon ' + iconColor + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                    }
+                    
+                    unitsHtml += '</div><div class="server-details">U' + server.position + '-' + (server.position + server.height - 1) + ' (' + server.height + 'U) - ' + server.power + 'W</div></div></div>';
+                } else if (!occupiedUnits.has(u)) {
+                    unitsHtml += '<div class="rack-unit" ';
+                    unitsHtml += 'data-position="' + u + '" ';
+                    unitsHtml += 'ondragover="handleDragOver(event, ' + u + ')" ';
+                    unitsHtml += 'ondragleave="handleDragLeave(event)" ';
+                    unitsHtml += 'ondrop="handleDrop(event, ' + u + ')" ';
+                    unitsHtml += 'onclick="openAddServerDialogAtPosition(' + u + ')">';
+                    unitsHtml += '<span class="rack-unit-label">' + u + '</span></div>';
+                }
+            }
+            document.getElementById('rack-units-content').innerHTML = unitsHtml;
+        }
+
+        function renderServerList() {
+            var rack = getCurrentRack();
+            var container = document.getElementById('serverListContent');
+            
+            if (rack.servers.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280; font-size: 0.875rem;">' + t('noServersConfigured') + '</p>';
+                return;
+            }
+
+            var sortedServers = rack.servers.slice().sort(function(a, b) { return b.position - a.position; });
+            var html = '<table class="server-table"><thead><tr><th>' + t('server') + '</th><th>' + t('position') + '</th><th>' + t('power') + '</th><th>' + t('powerType') + '</th><th>' + t('connections') + '</th></tr></thead><tbody>';
+
+            for (var i = 0; i < sortedServers.length; i++) {
+                var server = sortedServers[i];
+                html += '<tr><td><strong>' + server.name + '</strong></td>';
+                html += '<td>U' + server.position + '-' + (server.position + server.height - 1) + ' (' + server.height + 'U)</td>';
+                html += '<td>' + server.power + 'W</td>';
+                
+                if (server.dualPower) {
+                    html += '<td><span class="power-type-badge power-type-dual">' + t('dualType') + '</span></td>';
+                    var leftPhase = null, leftBreaker = null, rightPhase = null, rightBreaker = null;
+                    for (var j = 0; j < state.pduConfig.left.phases.length; j++) {
+                        if (state.pduConfig.left.phases[j].id === server.leftPhase) leftPhase = state.pduConfig.left.phases[j];
+                    }
+                    var leftBreakers = getAvailableBreakers(rack, 'left');
+                    for (var j = 0; j < leftBreakers.length; j++) {
+                        if (leftBreakers[j].id === server.leftBreaker) leftBreaker = leftBreakers[j];
+                    }
+                    for (var j = 0; j < state.pduConfig.right.phases.length; j++) {
+                        if (state.pduConfig.right.phases[j].id === server.rightPhase) rightPhase = state.pduConfig.right.phases[j];
+                    }
+                    var rightBreakers = getAvailableBreakers(rack, 'right');
+                    for (var j = 0; j < rightBreakers.length; j++) {
+                        if (rightBreakers[j].id === server.rightBreaker) rightBreaker = rightBreakers[j];
+                    }
+                    html += '<td style="font-size: 0.8rem;"><strong>' + rack.pduLeft.name + ':</strong> ' + (leftPhase ? leftPhase.name : 'N/A') + ' → ' + (leftBreaker ? leftBreaker.name : 'N/A') + '<br>';
+                    html += '<strong>' + rack.pduRight.name + ':</strong> ' + (rightPhase ? rightPhase.name : 'N/A') + ' → ' + (rightBreaker ? rightBreaker.name : 'N/A') + '</td>';
+                } else {
+                    html += '<td><span class="power-type-badge power-type-single">' + t('singleType') + '</span></td>';
+                    var pduName = server.pduSide === 'left' ? rack.pduLeft.name : rack.pduRight.name;
+                    var config = server.pduSide === 'left' ? state.pduConfig.left : state.pduConfig.right;
+                    var phaseId = server.pduSide === 'left' ? server.leftPhase : server.rightPhase;
+                    var breakerId = server.pduSide === 'left' ? server.leftBreaker : server.rightBreaker;
+                    var phase = null;
+                    for (var j = 0; j < config.phases.length; j++) {
+                        if (config.phases[j].id === phaseId) phase = config.phases[j];
+                    }
+                    var breakers = getAvailableBreakers(rack, server.pduSide);
+                    var breaker = null;
+                    for (var j = 0; j < breakers.length; j++) {
+                        if (breakers[j].id === breakerId) breaker = breakers[j];
+                    }
+                    html += '<td style="font-size: 0.8rem;"><strong>' + pduName + ':</strong> ' + (phase ? phase.name : 'N/A') + ' → ' + (breaker ? breaker.name : 'N/A') + '</td>';
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function renderConfigPanel() {
+            var rack = getCurrentRack();
+            var panel = document.getElementById('config-panel');
+            
+            if (!rack.selectedServer) {
+                var html = '<div class="config-panel">';
+                html += '<div class="config-header"><h3 class="config-title">' + t('serverConfig') + '</h3></div>';
+                html += '<button class="btn-add" onclick="openAddServerDialog()" style="width: 100%; margin-bottom: 16px;"><span>+</span> ' + t('addServer') + '</button>';
+                html += '<div class="text-center" style="color: #6b7280;">' + t('selectServerToConfig') + '</div>';
+                html += '</div>';
+                
+                html += '<div class="search-filter-box">';
+                html += '<div class="search-filter-header" onclick="toggleSearchFilter()">';
+                html += '<div class="search-filter-title">';
+                html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>';
+                html += '<span data-i18n="searchAndFilters">' + t('searchAndFilters') + '</span>';
+                html += '</div>';
+                html += '<button class="search-toggle-btn ' + (searchFilter.isCollapsed ? 'collapsed' : '') + '">';
+                html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                html += '</button></div>';
+                html += '<div class="search-filter-content ' + (searchFilter.isCollapsed ? 'collapsed' : '') + '">';
+                html += '<div class="search-bar"><div class="search-input-wrapper">';
+                html += '<input type="text" class="search-input" id="searchInput" placeholder="' + t('searchPlaceholder') + '" oninput="handleSearch(this.value)" value="' + searchFilter.searchTerm + '">';
+                html += '<svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>';
+                html += '<button class="clear-search ' + (searchFilter.searchTerm ? 'visible' : '') + '" id="clearSearchBtn" onclick="clearSearch()">';
+                html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+                html += '</button></div></div>';
+                html += '<div class="filter-chips">';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'all' ? 'active' : '') + '" id="filterAll" onclick="setFilter(\'all\')">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
+                html += '<span data-i18n="filterAll">' + t('filterAll') + '</span></div>';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'dual' ? 'active' : '') + '" id="filterDual" onclick="setFilter(\'dual\')">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                html += '<span data-i18n="filterDual">' + t('filterDual') + '</span></div>';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'single' ? 'active' : '') + '" id="filterSingle" onclick="setFilter(\'single\')">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>';
+                html += '<span data-i18n="filterSingle">' + t('filterSingle') + '</span></div>';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'left' ? 'active' : '') + '" id="filterLeftPDU" onclick="setFilter(\'left\')">';
+                html += '<span data-i18n="filterLeftPDU">' + t('filterLeftPDU') + '</span></div>';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'right' ? 'active' : '') + '" id="filterRightPDU" onclick="setFilter(\'right\')">';
+                html += '<span data-i18n="filterRightPDU">' + t('filterRightPDU') + '</span></div>';
+                html += '<div class="filter-chip ' + (searchFilter.activeFilter === 'nopower' ? 'active' : '') + '" id="filterNoPower" onclick="setFilter(\'nopower\')">';
+                html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>';
+                html += '<span data-i18n="filterNoPower">' + t('filterNoPower') + '</span></div>';
+                html += '</div>';
+                html += '<div class="filter-results" id="filterResults" style="display: none;"></div>';
+                html += '</div></div>';
+                
+                panel.innerHTML = html;
+                return;
+            }
+
+            var server = rack.selectedServer;
+            var html = '<div class="config-panel">';
+            html += '<div class="config-header">';
+            html += '<h3 class="config-title">' + t('serverConfig') + '</h3>';
+            html += '<button class="btn-close-config" onclick="closeConfigPanel()" title="' + t('close') + '">';
+            html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            html += '</button></div>';
+            html += '<button class="btn-add" onclick="openAddServerDialog()" style="width: 100%; margin-bottom: 16px;"><span>+</span> ' + t('addServer') + '</button>';
+            html += '<div class="form-group"><label class="form-label">' + t('serverName') + '</label><input type="text" class="form-input" value="' + server.name + '" onchange="updateServer(\'name\', this.value)"></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('position') + '</label><input type="number" class="form-input" min="1" max="' + rack.rackSize + '" value="' + server.position + '" onchange="updateServer(\'position\', parseInt(this.value))"></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('height') + '</label><input type="number" class="form-input" min="1" max="8" value="' + server.height + '" onchange="updateServer(\'height\', parseInt(this.value))"></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('power') + '</label><input type="number" class="form-input" min="0" step="50" value="' + server.power + '" onchange="updateServer(\'power\', parseInt(this.value) || 0)"></div>';
+            html += '<div class="form-group"><label class="form-checkbox"><input type="checkbox" ' + (server.dualPower ? 'checked' : '') + ' onchange="updateServer(\'dualPower\', this.checked)"><span class="form-label" style="margin: 0;">' + t('dualPowerRedundant') + '</span></label></div>';
+
+            if (server.dualPower) {
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + ' ' + rack.pduLeft.name + '</label><select class="form-select" onchange="updateServerPhase(\'left\', this.value)">';
+                var leftPhases = getAvailablePhases(rack, 'left');
+                for (var i = 0; i < leftPhases.length; i++) {
+                    html += '<option value="' + leftPhases[i].id + '" ' + (server.leftPhase === leftPhases[i].id ? 'selected' : '') + '>' + leftPhases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + ' ' + rack.pduLeft.name + '</label><select class="form-select" onchange="updateServer(\'leftBreaker\', this.value)">';
+                var leftBreakers = getAvailableBreakers(rack, 'left');
+                for (var i = 0; i < leftBreakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                    if (leftBreakers[i].phase === mappedPhase || leftBreakers[i].phase === server.leftPhase) {
+                        html += '<option value="' + leftBreakers[i].id + '" ' + (server.leftBreaker === leftBreakers[i].id ? 'selected' : '') + '>' + leftBreakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + ' ' + rack.pduRight.name + '</label><select class="form-select" onchange="updateServerPhase(\'right\', this.value)">';
+                var rightPhases = getAvailablePhases(rack, 'right');
+                for (var i = 0; i < rightPhases.length; i++) {
+                    html += '<option value="' + rightPhases[i].id + '" ' + (server.rightPhase === rightPhases[i].id ? 'selected' : '') + '>' + rightPhases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + ' ' + rack.pduRight.name + '</label><select class="form-select" onchange="updateServer(\'rightBreaker\', this.value)">';
+                var rightBreakers = getAvailableBreakers(rack, 'right');
+                for (var i = 0; i < rightBreakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                    if (rightBreakers[i].phase === mappedPhase || rightBreakers[i].phase === server.rightPhase) {
+                        html += '<option value="' + rightBreakers[i].id + '" ' + (server.rightBreaker === rightBreakers[i].id ? 'selected' : '') + '>' + rightBreakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+            } else {
+                html += '<div class="form-group"><label class="form-label">' + t('powerSupply') + '</label><select class="form-select" onchange="updateServer(\'pduSide\', this.value)">';
+                html += '<option value="left" ' + (server.pduSide === 'left' ? 'selected' : '') + '>' + rack.pduLeft.name + '</option>';
+                html += '<option value="right" ' + ((server.pduSide || 'right') === 'right' ? 'selected' : '') + '>' + rack.pduRight.name + '</option>';
+                html += '</select></div>';
+                var pduSide = server.pduSide || 'right';
+                var phases = getAvailablePhases(rack, pduSide);
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + '</label><select class="form-select" onchange="updateServerPhase(\'' + pduSide + '\', this.value)">';
+                for (var i = 0; i < phases.length; i++) {
+                    var currentPhase = pduSide === 'left' ? server.leftPhase : server.rightPhase;
+                    html += '<option value="' + phases[i].id + '" ' + (currentPhase === phases[i].id ? 'selected' : '') + '>' + phases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + '</label><select class="form-select" onchange="updateServer(\'' + (pduSide === 'left' ? 'leftBreaker' : 'rightBreaker') + '\', this.value)">';
+                var currentPhase = pduSide === 'left' ? server.leftPhase : server.rightPhase;
+                var breakers = getAvailableBreakers(rack, pduSide);
+                for (var i = 0; i < breakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, pduSide, currentPhase);
+                    if (breakers[i].phase === mappedPhase || breakers[i].phase === currentPhase) {
+                        var currentBreaker = pduSide === 'left' ? server.leftBreaker : server.rightBreaker;
+                        html += '<option value="' + breakers[i].id + '" ' + (currentBreaker === breakers[i].id ? 'selected' : '') + '>' + breakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+            }
+
+            html += '<button class="btn-delete" onclick="deleteServer()" style="margin-top: 16px; width: 100%;">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+            html += t('deleteServer') + '</button></div>';
+            panel.innerHTML = html;
+        }
+		function render() {
+            renderRackTabs();
+            var summaryHtml = renderGlobalSummary();
+            if (summaryHtml) {
+                var existingSummary = document.querySelector('.global-summary');
+                if (existingSummary) {
+                    existingSummary.outerHTML = summaryHtml;
+                } else {
+                    var rackTabs = document.querySelector('.rack-tabs');
+                    if (rackTabs) {
+                        rackTabs.insertAdjacentHTML('afterend', summaryHtml);
+                    }
+                }
+            } else {
+                var existingSummary = document.querySelector('.global-summary');
+                if (existingSummary) existingSummary.remove();
+            }
+            renderMainTitle();
+            renderPDU('left');
+            renderPDU('right');
+            renderRack();
+            renderConfigPanel();
+            renderServerList();
+            updateFilterResults();
+        }
+
+        function renderMainTitle() {
+            var rack = getCurrentRack();
+            var input = document.querySelector('.main-title-input');
+            if (input) input.value = t('mainTitle');
+            var select = document.getElementById('rackSizeSelect');
+            if (select) select.value = rack.rackSize;
+        }
+
+        function changeRackSize(size) {
+            saveStateToHistory();
+            var rack = getCurrentRack();
+            var newSize = parseInt(size);
+            rack.servers = rack.servers.filter(function(server) {
+                if (server.position + server.height - 1 <= newSize) return true;
+                if (rack.selectedServer && rack.selectedServer.id === server.id) rack.selectedServer = null;
+                return false;
+            });
+            rack.rackSize = newSize;
+            rack.rackTitle = 'Rack ' + newSize + 'U';
+            render();
+        }
+
+        function togglePDU(side) {
+            saveStateToHistory();
+            var rack = getCurrentRack();
+            if (side === 'left') rack.pduLeft.on = !rack.pduLeft.on;
+            else rack.pduRight.on = !rack.pduRight.on;
+            render();
+        }
+
+        function toggleSettings(side) {
+            var rack = getCurrentRack();
+            if (side === 'left') rack.pduLeft.showSettings = !rack.pduLeft.showSettings;
+            else rack.pduRight.showSettings = !rack.pduRight.showSettings;
+            render();
+        }
+
+        function updatePDUName(side, name) {
+            var rack = getCurrentRack();
+            if (side === 'left') rack.pduLeft.name = name;
+            else rack.pduRight.name = name;
+            render();
+        }
+
+        function updateMainTitle(title) {
+            state.mainTitle = title;
+        }
+
+        function updateRackTitle(title) {
+            var rack = getCurrentRack();
+            rack.rackTitle = title;
+        }
+
+        function updateMainBreaker(side, value) {
+            saveStateToHistory();
+            var rack = getCurrentRack();
+            var current = parseInt(value) || 32;
+            if (side === 'left') rack.pduLeft.mainBreaker = current;
+            else rack.pduRight.mainBreaker = current;
+            render();
+        }
+
+        function openAddServerDialog() {
+            document.getElementById('addServerModal').classList.add('active');
+            var rack = getCurrentRack();
+            var newServer = {
+                name: t('server') + ' ' + (rack.servers.length + 1),
+                position: 1,
+                height: 1,
+                power: 500,
+                dualPower: false,
+                pduSide: 'right',
+                leftPhase: 'L1',
+                rightPhase: 'R1',
+                leftBreaker: 'LB1',
+                rightBreaker: 'RB1'
+            };
+            renderAddServerForm(newServer);
+        }
+
+        function openAddServerDialogAtPosition(position) {
+            document.getElementById('addServerModal').classList.add('active');
+            var rack = getCurrentRack();
+            var newServer = {
+                name: t('server') + ' ' + (rack.servers.length + 1),
+                position: position,
+                height: 1,
+                power: 500,
+                dualPower: false,
+                pduSide: 'right',
+                leftPhase: 'L1',
+                rightPhase: 'R1',
+                leftBreaker: 'LB1',
+                rightBreaker: 'RB1'
+            };
+            renderAddServerForm(newServer);
+        }
+
+        function renderAddServerForm(server) {
+            var rack = getCurrentRack();
+            var html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+            html += '<div class="form-group"><label class="form-label">' + t('serverName') + '</label><input type="text" class="form-input" id="newServerName" value="' + server.name + '"></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('position') + '</label><input type="number" class="form-input" id="newServerPosition" min="1" max="' + rack.rackSize + '" value="' + server.position + '">';
+            html += '<p style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">' + t('positionHelp') + ' (1-' + rack.rackSize + ')</p></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('height') + '</label><input type="number" class="form-input" id="newServerHeight" min="1" max="8" value="' + server.height + '"></div>';
+            html += '<div class="form-group"><label class="form-label">' + t('power') + '</label><input type="number" class="form-input" id="newServerPower" min="0" step="50" value="' + server.power + '"></div>';
+            html += '<div class="form-group"><label class="form-checkbox"><input type="checkbox" id="newServerDualPower" ' + (server.dualPower ? 'checked' : '') + ' onchange="toggleNewServerDualPower()">';
+            html += '<span class="form-label" style="margin: 0;">' + t('dualPowerRedundant') + '</span></label></div>';
+            html += '<div id="powerConfig"></div>';
+            html += '<div class="modal-buttons"><button class="btn-cancel" onclick="closeAddServerDialog()">' + t('cancel') + '</button>';
+            html += '<button class="btn-confirm" onclick="confirmAddServer()">' + t('add') + '</button></div></div>';
+            document.getElementById('addServerForm').innerHTML = html;
+            renderPowerConfig(server);
+        }
+
+        function renderPowerConfig(server) {
+            var rack = getCurrentRack();
+            var html = '';
+            if (server.dualPower) {
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + ' ' + rack.pduLeft.name + '</label><select class="form-select" id="newServerLeftPhase" onchange="updateNewServerLeftPhase()">';
+                var leftPhases = getAvailablePhases(rack, 'left');
+                for (var i = 0; i < leftPhases.length; i++) {
+                    html += '<option value="' + leftPhases[i].id + '" ' + (server.leftPhase === leftPhases[i].id ? 'selected' : '') + '>' + leftPhases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + ' ' + rack.pduLeft.name + '</label><select class="form-select" id="newServerLeftBreaker">';
+                var leftBreakers = getAvailableBreakers(rack, 'left');
+                for (var i = 0; i < leftBreakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, 'left', server.leftPhase);
+                    if (leftBreakers[i].phase === mappedPhase || leftBreakers[i].phase === server.leftPhase) {
+                        html += '<option value="' + leftBreakers[i].id + '" ' + (server.leftBreaker === leftBreakers[i].id ? 'selected' : '') + '>' + leftBreakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + ' ' + rack.pduRight.name + '</label><select class="form-select" id="newServerRightPhase" onchange="updateNewServerRightPhase()">';
+                var rightPhases = getAvailablePhases(rack, 'right');
+                for (var i = 0; i < rightPhases.length; i++) {
+                    html += '<option value="' + rightPhases[i].id + '" ' + (server.rightPhase === rightPhases[i].id ? 'selected' : '') + '>' + rightPhases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + ' ' + rack.pduRight.name + '</label><select class="form-select" id="newServerRightBreaker">';
+                var rightBreakers = getAvailableBreakers(rack, 'right');
+                for (var i = 0; i < rightBreakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, 'right', server.rightPhase);
+                    if (rightBreakers[i].phase === mappedPhase || rightBreakers[i].phase === server.rightPhase) {
+                        html += '<option value="' + rightBreakers[i].id + '" ' + (server.rightBreaker === rightBreakers[i].id ? 'selected' : '') + '>' + rightBreakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+            } else {
+                html += '<div class="form-group"><label class="form-label">' + t('powerSupply') + '</label><select class="form-select" id="newServerPduSide" onchange="updateNewServerPduSide()">';
+                html += '<option value="left" ' + (server.pduSide === 'left' ? 'selected' : '') + '>' + rack.pduLeft.name + '</option>';
+                html += '<option value="right" ' + (server.pduSide === 'right' ? 'selected' : '') + '>' + rack.pduRight.name + '</option>';
+                html += '</select></div>';
+                var pduSide = server.pduSide || 'right';
+                var phases = getAvailablePhases(rack, pduSide);
+                var currentPhase = pduSide === 'left' ? server.leftPhase : server.rightPhase;
+                html += '<div class="form-group"><label class="form-label">' + t('phase') + '</label><select class="form-select" id="newServerPhase" onchange="updateNewServerPhase()">';
+                for (var i = 0; i < phases.length; i++) {
+                    html += '<option value="' + phases[i].id + '" ' + (currentPhase === phases[i].id ? 'selected' : '') + '>' + phases[i].name + '</option>';
+                }
+                html += '</select></div>';
+                html += '<div class="form-group"><label class="form-label">' + t('circuitBreaker') + '</label><select class="form-select" id="newServerBreaker">';
+                var currentBreaker = pduSide === 'left' ? server.leftBreaker : server.rightBreaker;
+                var breakers = getAvailableBreakers(rack, pduSide);
+                for (var i = 0; i < breakers.length; i++) {
+                    var mappedPhase = getMappedPhase(rack, pduSide, currentPhase);
+                    if (breakers[i].phase === mappedPhase || breakers[i].phase === currentPhase) {
+                        html += '<option value="' + breakers[i].id + '" ' + (currentBreaker === breakers[i].id ? 'selected' : '') + '>' + breakers[i].name + '</option>';
+                    }
+                }
+                html += '</select></div>';
+            }
+            document.getElementById('powerConfig').innerHTML = html;
+        }
+
+        function toggleNewServerDualPower() {
+            var dualPower = document.getElementById('newServerDualPower').checked;
+            var server = {
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value),
+                dualPower: dualPower,
+                pduSide: document.getElementById('newServerPduSide') ? document.getElementById('newServerPduSide').value : 'right',
+                leftPhase: document.getElementById('newServerLeftPhase') ? document.getElementById('newServerLeftPhase').value : 'L1',
+                rightPhase: document.getElementById('newServerRightPhase') ? document.getElementById('newServerRightPhase').value : 'R1',
+                leftBreaker: document.getElementById('newServerLeftBreaker') ? document.getElementById('newServerLeftBreaker').value : 'LB1',
+                rightBreaker: document.getElementById('newServerRightBreaker') ? document.getElementById('newServerRightBreaker').value : 'RB1'
+            };
+            renderPowerConfig(server);
+        }
+
+        function updateNewServerPduSide() {
+            var rack = getCurrentRack();
+            var pduSide = document.getElementById('newServerPduSide').value;
+            var phases = getAvailablePhases(rack, pduSide);
+            var firstPhase = phases[0].id;
+            var breakers = getAvailableBreakers(rack, pduSide);
+            var firstBreaker = null;
+            for (var i = 0; i < breakers.length; i++) {
+                var mappedPhase = getMappedPhase(rack, pduSide, firstPhase);
+                if (breakers[i].phase === mappedPhase || breakers[i].phase === firstPhase) {
+                    firstBreaker = breakers[i];
+                    break;
+                }
+            }
+            var server = {
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value),
+                dualPower: false,
+                pduSide: pduSide,
+                leftPhase: pduSide === 'left' ? firstPhase : 'L1',
+                rightPhase: pduSide === 'right' ? firstPhase : 'R1',
+                leftBreaker: pduSide === 'left' ? firstBreaker.id : 'LB1',
+                rightBreaker: pduSide === 'right' ? firstBreaker.id : 'RB1'
+            };
+            renderPowerConfig(server);
+        }
+
+        function updateNewServerPhase() {
+            var rack = getCurrentRack();
+            var pduSide = document.getElementById('newServerPduSide').value;
+            var selectedPhase = document.getElementById('newServerPhase').value;
+            var breakers = getAvailableBreakers(rack, pduSide);
+            var firstBreaker = null;
+            for (var i = 0; i < breakers.length; i++) {
+                var mappedPhase = getMappedPhase(rack, pduSide, selectedPhase);
+                if (breakers[i].phase === mappedPhase || breakers[i].phase === selectedPhase) {
+                    firstBreaker = breakers[i];
+                    break;
+                }
+            }
+            var server = {
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value),
+                dualPower: false,
+                pduSide: pduSide,
+                leftPhase: pduSide === 'left' ? selectedPhase : 'L1',
+                rightPhase: pduSide === 'right' ? selectedPhase : 'R1',
+                leftBreaker: pduSide === 'left' ? (firstBreaker ? firstBreaker.id : 'LB1') : 'LB1',
+                rightBreaker: pduSide === 'right' ? (firstBreaker ? firstBreaker.id : 'RB1') : 'RB1'
+            };
+            renderPowerConfig(server);
+        }
+
+        function updateNewServerLeftPhase() {
+            var rack = getCurrentRack();
+            var leftPhase = document.getElementById('newServerLeftPhase').value;
+            var breakers = getAvailableBreakers(rack, 'left');
+            var firstBreaker = null;
+            for (var i = 0; i < breakers.length; i++) {
+                var mappedPhase = getMappedPhase(rack, 'left', leftPhase);
+                if (breakers[i].phase === mappedPhase || breakers[i].phase === leftPhase) {
+                    firstBreaker = breakers[i];
+                    break;
+                }
+            }
+            var server = {
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value),
+                dualPower: true,
+                pduSide: 'right',
+                leftPhase: leftPhase,
+                rightPhase: document.getElementById('newServerRightPhase').value,
+                leftBreaker: firstBreaker.id,
+                rightBreaker: document.getElementById('newServerRightBreaker').value
+            };
+            renderPowerConfig(server);
+        }
+
+        function updateNewServerRightPhase() {
+            var rack = getCurrentRack();
+            var rightPhase = document.getElementById('newServerRightPhase').value;
+            var breakers = getAvailableBreakers(rack, 'right');
+            var firstBreaker = null;
+            for (var i = 0; i < breakers.length; i++) {
+                var mappedPhase = getMappedPhase(rack, 'right', rightPhase);
+                if (breakers[i].phase === mappedPhase || breakers[i].phase === rightPhase) {
+                    firstBreaker = breakers[i];
+                    break;
+                }
+            }
+            var server = {
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value),
+                dualPower: true,
+                pduSide: 'right',
+                leftPhase: document.getElementById('newServerLeftPhase').value,
+                rightPhase: rightPhase,
+                leftBreaker: document.getElementById('newServerLeftBreaker').value,
+                rightBreaker: firstBreaker.id
+            };
+            renderPowerConfig(server);
+        }
+		function confirmAddServer() {
+            var rack = getCurrentRack();
+            var newServer = {
+                id: Date.now(),
+                name: document.getElementById('newServerName').value,
+                position: parseInt(document.getElementById('newServerPosition').value),
+                height: parseInt(document.getElementById('newServerHeight').value),
+                power: parseInt(document.getElementById('newServerPower').value) || 0,
+                dualPower: document.getElementById('newServerDualPower').checked
+            };
+
+            if (newServer.dualPower) {
+                newServer.leftPhase = document.getElementById('newServerLeftPhase').value;
+                newServer.leftBreaker = document.getElementById('newServerLeftBreaker').value;
+                newServer.rightPhase = document.getElementById('newServerRightPhase').value;
+                newServer.rightBreaker = document.getElementById('newServerRightBreaker').value;
+            } else {
+                newServer.pduSide = document.getElementById('newServerPduSide').value;
+                if (newServer.pduSide === 'left') {
+                    newServer.leftPhase = document.getElementById('newServerPhase').value;
+                    newServer.leftBreaker = document.getElementById('newServerBreaker').value;
+                    newServer.rightPhase = 'R1';
+                    newServer.rightBreaker = 'RB1';
+                } else {
+                    newServer.rightPhase = document.getElementById('newServerPhase').value;
+                    newServer.rightBreaker = document.getElementById('newServerBreaker').value;
+                    newServer.leftPhase = 'L1';
+                    newServer.leftBreaker = 'LB1';
+                }
+            }
+
+            if (!isPositionValid(newServer.position, newServer.height)) {
+                alert(t('invalidPosition'));
+                return;
+            }
+            saveStateToHistory();
+            rack.servers.push(newServer);
+            closeAddServerDialog();
+            render();
+        }
+
+        function isPositionValid(position, height, excludeId) {
+            var rack = getCurrentRack();
+            if (position < 1 || position + height - 1 > rack.rackSize) return false;
+            for (var i = 0; i < rack.servers.length; i++) {
+                var server = rack.servers[i];
+                if (excludeId && server.id === excludeId) continue;
+                var serverStart = server.position;
+                var serverEnd = server.position + server.height - 1;
+                var newEnd = position + height - 1;
+                if (!(newEnd < serverStart || position > serverEnd)) return false;
+            }
+            return true;
+        }
+
+        function closeAddServerDialog() {
+            document.getElementById('addServerModal').classList.remove('active');
+        }
+
+        function selectServer(id) {
+            var rack = getCurrentRack();
+            for (var i = 0; i < rack.servers.length; i++) {
+                if (rack.servers[i].id === id) {
+                    rack.selectedServer = rack.servers[i];
+                    break;
+                }
+            }
+            render();
+        }
+
+        function updateServer(field, value) {
+            var rack = getCurrentRack();
+            if (!rack.selectedServer) return;
+            var server = null;
+            for (var i = 0; i < rack.servers.length; i++) {
+                if (rack.servers[i].id === rack.selectedServer.id) {
+                    server = rack.servers[i];
+                    break;
+                }
+            }
+            if (!server) return;
+
+            if (field === 'position' || field === 'height') {
+                var newPosition = field === 'position' ? value : server.position;
+                var newHeight = field === 'height' ? value : server.height;
+                if (!isPositionValid(newPosition, newHeight, server.id)) {
+                    alert(t('invalidPosition'));
+                    render();
+                    return;
+                }
+            }
+            saveStateToHistory();
+            server[field] = value;
+            rack.selectedServer[field] = value;
+            render();
+        }
+
+        function updateServerPhase(side, phaseId) {
+            var rack = getCurrentRack();
+            if (!rack.selectedServer) return;
+            var server = null;
+            for (var i = 0; i < rack.servers.length; i++) {
+                if (rack.servers[i].id === rack.selectedServer.id) {
+                    server = rack.servers[i];
+                    break;
+                }
+            }
+            if (!server) return;
+
+            var breakers = getAvailableBreakers(rack, side);
+            var firstBreaker = null;
+            for (var i = 0; i < breakers.length; i++) {
+                var mappedPhase = getMappedPhase(rack, side, phaseId);
+                if (breakers[i].phase === mappedPhase || breakers[i].phase === phaseId) {
+                    firstBreaker = breakers[i];
+                    break;
+                }
+            }
+
+            if (side === 'left') {
+                server.leftPhase = phaseId;
+                server.leftBreaker = firstBreaker ? firstBreaker.id : 'LB1';
+                rack.selectedServer.leftPhase = phaseId;
+                rack.selectedServer.leftBreaker = server.leftBreaker;
+            } else {
+                server.rightPhase = phaseId;
+                server.rightBreaker = firstBreaker ? firstBreaker.id : 'RB1';
+                rack.selectedServer.rightPhase = phaseId;
+                rack.selectedServer.rightBreaker = server.rightBreaker;
+            }
+            render();
+        }
+
+        function deleteServer() {
+            var rack = getCurrentRack();
+            if (!rack.selectedServer) {
+                alert(t('noServerSelected'));
+                return;
+            }
+            var serverToDelete = rack.selectedServer;
+            if (!confirm(t('confirmDeleteServer') + ' "' + serverToDelete.name + '"?')) return;
+            saveStateToHistory();
+            rack.servers = rack.servers.filter(function(s) { return s.id !== serverToDelete.id; });
+            rack.selectedServer = null;
+            render();
+        }
+
+        function saveConfiguration() {
+            var config = {
+                version: '3.0',
+                timestamp: new Date().toISOString(),
+                mainTitle: state.mainTitle,
+                racks: state.racks
+            };
+            var json = JSON.stringify(config, null, 2);
+            var blob = new Blob([json], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            var filename = 'MultiRack_config_' + new Date().toISOString().split('T')[0] + '.json';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function loadConfiguration(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var config = JSON.parse(e.target.result);
+                    if (!config.version) {
+                        alert(t('invalidFile'));
+                        return;
+                    }
+                    if (!confirm(t('confirmLoadConfig'))) return;
+                    state.mainTitle = config.mainTitle || state.mainTitle;
+                    if (config.version === '3.0' && config.racks) {
+                        state.racks = config.racks;
+                        for (var i = 0; i < state.racks.length; i++) {
+                            if (!state.racks[i].pduLeft.type) state.racks[i].pduLeft.type = '3F';
+                            if (!state.racks[i].pduRight.type) state.racks[i].pduRight.type = '3F';
+                            if (!state.racks[i].pduLeft.singlePhase) state.racks[i].pduLeft.singlePhase = 'L1';
+                            if (!state.racks[i].pduRight.singlePhase) state.racks[i].pduRight.singlePhase = 'R1';
+                            if (!state.racks[i].pduLeft.breakersPerPhase) state.racks[i].pduLeft.breakersPerPhase = 2;
+                            if (!state.racks[i].pduRight.breakersPerPhase) state.racks[i].pduRight.breakersPerPhase = 2;
+                            if (!state.racks[i].pduLeft.breakerCurrent) state.racks[i].pduLeft.breakerCurrent = 10;
+                            if (!state.racks[i].pduRight.breakerCurrent) state.racks[i].pduRight.breakerCurrent = 10;
+                        }
+                        state.currentRackId = state.racks[0].id;
+                    } else if (config.version === '2.0' && config.racks) {
+                        state.racks = config.racks;
+                        for (var i = 0; i < state.racks.length; i++) {
+                            state.racks[i].pduLeft.type = '3F';
+                            state.racks[i].pduRight.type = '3F';
+                            state.racks[i].pduLeft.singlePhase = 'L1';
+                            state.racks[i].pduRight.singlePhase = 'R1';
+                        }
+                        state.currentRackId = state.racks[0].id;
+                    } else if (config.servers) {
+                        state.racks = [{
+                            id: 1,
+                            rackTitle: config.rackTitle || 'Rack 42U',
+                            rackSize: config.rackSize || 42,
+                            servers: config.servers || [],
+                            selectedServer: null,
+                            pduLeft: config.pduLeft || { name: t('pduLeft'), type: '3F', mainBreaker: 32, singlePhase: 'L1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 },
+                            pduRight: config.pduRight || { name: t('pduRight'), type: '3F', mainBreaker: 32, singlePhase: 'R1', on: true, showSettings: false, breakersPerPhase: 2, breakerCurrent: 10 }
+                        }];
+                        state.currentRackId = 1;
+                    }
+                    render();
+                    alert(t('configLoadedSuccess'));
+                } catch (error) {
+                    alert(t('fileReadError'));
+                }
+                document.getElementById('fileInput').value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function calculateOptimalDistribution(side) {
+            var rack = getCurrentRack();
+            var phases = getAvailablePhases(rack, side);
+            var phaseMaxCurrent = getPhaseMaxCurrent(side);
+            
+            var relevantServers = [];
+            for (var i = 0; i < rack.servers.length; i++) {
+                var server = rack.servers[i];
+                if (server.dualPower && side === 'left') {
+                    relevantServers.push({
+                        server: server,
+                        isDual: true,
+                        currentPhase: server.leftPhase,
+                        currentBreaker: server.leftBreaker,
+                        load: rack.pduLeft.on && rack.pduRight.on ? (server.power / 2) / 230 : (rack.pduLeft.on ? server.power / 230 : 0)
+                    });
+                } else if (server.dualPower && side === 'right') {
+                    relevantServers.push({
+                        server: server,
+                        isDual: true,
+                        currentPhase: server.rightPhase,
+                        currentBreaker: server.rightBreaker,
+                        load: rack.pduLeft.on && rack.pduRight.on ? (server.power / 2) / 230 : (rack.pduRight.on ? server.power / 230 : 0)
+                    });
+                } else if (!server.dualPower && server.pduSide === side) {
+                    var pduOn = side === 'left' ? rack.pduLeft.on : rack.pduRight.on;
+                    relevantServers.push({
+                        server: server,
+                        isDual: false,
+                        currentPhase: side === 'left' ? server.leftPhase : server.rightPhase,
+                        currentBreaker: side === 'left' ? server.leftBreaker : server.rightBreaker,
+                        load: pduOn ? server.power / 230 : 0
+                    });
+                }
+            }
+
+            if (relevantServers.length === 0) return null;
+
+            relevantServers.sort(function(a, b) { return b.load - a.load; });
+
+            var phaseLoads = {};
+            for (var i = 0; i < phases.length; i++) {
+                phaseLoads[phases[i].id] = 0;
+            }
+
+            var suggestions = [];
+            
+            for (var i = 0; i < relevantServers.length; i++) {
+                var serverInfo = relevantServers[i];
+                
+                var minPhase = null;
+                var minLoad = Infinity;
+                for (var j = 0; j < phases.length; j++) {
+                    var phaseId = phases[j].id;
+                    if (phaseLoads[phaseId] < minLoad) {
+                        minLoad = phaseLoads[phaseId];
+                        minPhase = phaseId;
+                    }
+                }
+
+                phaseLoads[minPhase] += serverInfo.load;
+
+                if (minPhase !== serverInfo.currentPhase) {
+                    var fromPhase = null, toPhase = null;
+                    for (var j = 0; j < phases.length; j++) {
+                        if (phases[j].id === serverInfo.currentPhase) fromPhase = phases[j];
+                        if (phases[j].id === minPhase) toPhase = phases[j];
+                    }
+                    
+                    var breakers = getAvailableBreakers(rack, side);
+                    var newBreaker = null;
+                    for (var j = 0; j < breakers.length; j++) {
+                        var mappedPhase = getMappedPhase(rack, side, minPhase);
+                        if (breakers[j].phase === mappedPhase || breakers[j].phase === minPhase) {
+                            newBreaker = breakers[j];
+                            break;
+                        }
+                    }
+
+                    suggestions.push({
+                        server: serverInfo.server,
+                        isDual: serverInfo.isDual,
+                        side: side,
+                        fromPhase: fromPhase,
+                        toPhase: toPhase,
+                        fromBreaker: serverInfo.currentBreaker,
+                        toBreaker: newBreaker ? newBreaker.id : null,
+                        load: serverInfo.load
+                    });
+                }
+            }
+
+            var phaseLoadArray = [];
+            for (var i = 0; i < phases.length; i++) {
+                phaseLoadArray.push((phaseLoads[phases[i].id] / phaseMaxCurrent) * 100);
+            }
+            
+            var sum = 0;
+            for (var i = 0; i < phaseLoadArray.length; i++) sum += phaseLoadArray[i];
+            var avgLoad = sum / phaseLoadArray.length;
+            var maxLoad = Math.max.apply(Math, phaseLoadArray);
+            var minLoad = Math.min.apply(Math, phaseLoadArray);
+            var imbalance = maxLoad - minLoad;
+            
+            var variance = 0;
+            for (var i = 0; i < phaseLoadArray.length; i++) {
+                variance += Math.pow(phaseLoadArray[i] - avgLoad, 2);
+            }
+            variance /= phaseLoadArray.length;
+            var stdDev = Math.sqrt(variance);
+            
+            var balanceFactor = 100;
+            if (imbalance > 0) {
+                balanceFactor -= imbalance * 0.8;
+                balanceFactor -= stdDev * 0.5;
+            }
+            balanceFactor = Math.max(0, Math.min(100, balanceFactor));
+
+            return {
+                suggestions: suggestions,
+                optimizedBalance: {
+                    balanceFactor: balanceFactor,
+                    imbalance: imbalance,
+                    phaseLoads: phaseLoads
+                }
+            };
+        }
+
+        function openOptimizationModal(side) {
+            var rack = getCurrentRack();
+            var pdu = side === 'left' ? rack.pduLeft : rack.pduRight;
+            var currentBalance = calculatePhaseBalance(side);
+            var optimization = calculateOptimalDistribution(side);
+
+            if (!optimization || optimization.suggestions.length === 0) {
+                document.getElementById('optimizationContent').innerHTML = '<div class="no-suggestions">' + t('alreadyOptimal') + '<br><span style="font-size: 0.875rem; color: #6b7280;">' + t('noChangesNeeded') + '</span></div><div class="optimization-buttons"><button class="btn-close-optimization" onclick="closeOptimizationModal()">' + t('close') + '</button></div>';
+                document.getElementById('optimizationModal').classList.add('active');
+                return;
+            }
+
+            var html = '';
+            
+            html += '<div class="comparison-grid">';
+            html += '<div class="comparison-card">';
+            html += '<div class="comparison-header">📊 ' + t('current2') + '</div>';
+            var phases = getAvailablePhases(rack, side);
+            for (var i = 0; i < phases.length; i++) {
+                var phase = phases[i];
+                var load = calculatePhaseLoad(side, phase.id);
+                html += '<div class="phase-comparison"><span class="phase-comparison-label" style="color: #' + (phase.color === 'red' ? 'ef4444' : phase.color === 'yellow' ? 'eab308' : '3b82f6') + ';">' + phase.name + ':</span> ' + load.toFixed(1) + ' A</div>';
+            }
+            html += '<div class="balance-comparison"><div class="balance-comparison-value balance-' + getBalanceCategory(currentBalance.balanceFactor) + '">' + currentBalance.balanceFactor.toFixed(0) + '%</div><div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">' + getBalanceText(currentBalance.balanceFactor) + '</div></div>';
+            html += '</div>';
+
+            html += '<div class="comparison-card optimized">';
+            html += '<div class="comparison-header optimized">✨ ' + t('optimized') + '</div>';
+            for (var i = 0; i < phases.length; i++) {
+                var phase = phases[i];
+                var load = (optimization.optimizedBalance.phaseLoads[phase.id] || 0);
+                html += '<div class="phase-comparison"><span class="phase-comparison-label" style="color: #' + (phase.color === 'red' ? 'ef4444' : phase.color === 'yellow' ? 'eab308' : '3b82f6') + ';">' + phase.name + ':</span> ' + load.toFixed(1) + ' A</div>';
+            }
+            html += '<div class="balance-comparison"><div class="balance-comparison-value balance-' + getBalanceCategory(optimization.optimizedBalance.balanceFactor) + '">' + optimization.optimizedBalance.balanceFactor.toFixed(0) + '%</div><div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">' + getBalanceText(optimization.optimizedBalance.balanceFactor) + '</div></div>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '<div class="suggestions-list">';
+            html += '<div class="suggestions-title"><span>💡</span> ' + t('suggestedActions') + ' (' + optimization.suggestions.length + ')</div>';
+            for (var i = 0; i < optimization.suggestions.length; i++) {
+                var sug = optimization.suggestions[i];
+                html += '<div class="suggestion-item">';
+                html += '<strong>' + sug.server.name + '</strong><br>';
+                html += t('moveFrom') + ' <strong style="color: #ef4444;">' + sug.fromPhase.name + '</strong>';
+                html += '<span class="suggestion-arrow">→</span>';
+                html += '<strong style="color: #10b981;">' + sug.toPhase.name + '</strong>';
+                html += ' (' + sug.load.toFixed(1) + ' A)';
+                html += '</div>';
+            }
+            html += '</div>';
+
+            html += '<div class="optimization-buttons">';
+            html += '<button class="btn-close-optimization" onclick="closeOptimizationModal()">' + t('cancel') + '</button>';
+            html += '<button class="btn-apply-optimization" onclick="applyOptimization(\'' + side + '\')">' + t('applyOptimization') + '</button>';
+            html += '</div>';
+
+            document.getElementById('optimizationContent').innerHTML = html;
+            document.getElementById('optimizationModal').classList.add('active');
+            
+            state.pendingOptimization = { side: side, suggestions: optimization.suggestions };
+        }
+
+        function closeOptimizationModal() {
+            document.getElementById('optimizationModal').classList.remove('active');
+            delete state.pendingOptimization;
+        }
+
+        function applyOptimization(side) {
+            if (!state.pendingOptimization || !state.pendingOptimization.suggestions) return;
+            
+            saveStateToHistory();
+            var rack = getCurrentRack();
+            var suggestions = state.pendingOptimization.suggestions;
+            
+            for (var i = 0; i < suggestions.length; i++) {
+                var sug = suggestions[i];
+                var server = null;
+                
+                for (var j = 0; j < rack.servers.length; j++) {
+                    if (rack.servers[j].id === sug.server.id) {
+                        server = rack.servers[j];
+                        break;
+                    }
+                }
+                
+                if (!server) continue;
+                
+                if (side === 'left') {
+                    server.leftPhase = sug.toPhase.id;
+                    server.leftBreaker = sug.toBreaker;
+                } else {
+                    server.rightPhase = sug.toPhase.id;
+                    server.rightBreaker = sug.toBreaker;
+                }
+            }
+            
+            closeOptimizationModal();
+            render();
+            alert(t('optimizationApplied') + '\n' + suggestions.length + ' ' + t('serversReconfigured'));
+        }
+		function printCurrentRack() {
+            window.print();
+        }
+
+        function printAllRacks() {
+            var originalRackId = state.currentRackId;
+            var originalTabsHtml = document.querySelector('.rack-tabs');
+            var originalSummaryHtml = document.querySelector('.global-summary');
+            
+            if (originalTabsHtml) originalTabsHtml.style.display = 'none';
+            if (originalSummaryHtml) originalSummaryHtml.style.display = 'none';
+            
+            var printContainer = document.createElement('div');
+            printContainer.className = 'print-all-racks';
+            printContainer.style.display = 'none';
+            document.body.appendChild(printContainer);
+            
+            for (var i = 0; i < state.racks.length; i++) {
+                var rack = state.racks[i];
+                state.currentRackId = rack.id;
+                
+                var pageDiv = document.createElement('div');
+                pageDiv.className = 'print-page';
+                pageDiv.style.pageBreakAfter = 'always';
+                
+                var mainContent = document.querySelector('.grid-layout').cloneNode(true);
+                pageDiv.appendChild(mainContent);
+                
+                var serverList = document.getElementById('serverListBox').cloneNode(true);
+                pageDiv.appendChild(serverList);
+                
+                var license = document.querySelector('.license-box').cloneNode(true);
+                pageDiv.appendChild(license);
+                
+                printContainer.appendChild(pageDiv);
+                
+                renderPDU('left');
+                renderPDU('right');
+                renderRack();
+                renderServerList();
+                
+                var leftPDU = pageDiv.querySelector('#pdu-left');
+                var rightPDU = pageDiv.querySelector('#pdu-right');
+                var rackContent = pageDiv.querySelector('.col-4');
+                var serverListContent = pageDiv.querySelector('#serverListContent');
+                
+                if (leftPDU) leftPDU.innerHTML = document.getElementById('pdu-left').innerHTML;
+                if (rightPDU) rightPDU.innerHTML = document.getElementById('pdu-right').innerHTML;
+                if (rackContent) rackContent.innerHTML = document.querySelector('.col-4').innerHTML;
+                if (serverListContent) serverListContent.innerHTML = document.getElementById('serverListContent').innerHTML;
+            }
+            
+            var mainContainer = document.querySelector('.container');
+            mainContainer.style.display = 'none';
+            printContainer.style.display = 'block';
+            
+            window.print();
+            
+            setTimeout(function() {
+                printContainer.remove();
+                mainContainer.style.display = 'block';
+                if (originalTabsHtml) originalTabsHtml.style.display = '';
+                if (originalSummaryHtml) originalSummaryHtml.style.display = '';
+                state.currentRackId = originalRackId;
+                render();
+            }, 100);
+        }
+
+        var draggedServerId = null;
+        var draggedServerHeight = 0;
+        var draggedServerRackId = null;
+
+        function handleDragStart(event, serverId) {
+            var rack = getCurrentRack();
+            draggedServerId = serverId;
+            draggedServerRackId = rack.id;
+            
+            var server = rack.servers.find(function(s) { return s.id === serverId; });
+            if (server) {
+                draggedServerHeight = server.height;
+            }
+            
+            event.currentTarget.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+        }
+
+        function handleDragEnd(event) {
+            event.currentTarget.classList.remove('dragging');
+            
+            var units = document.querySelectorAll('.rack-unit');
+            for (var i = 0; i < units.length; i++) {
+                units[i].classList.remove('drop-target', 'drop-invalid');
+            }
+            
+            draggedServerId = null;
+            draggedServerHeight = 0;
+            draggedServerRackId = null;
+        }
+
+        function handleDragOver(event, position) {
+            if (!draggedServerId) return;
+            
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            
+            var rack = getCurrentRack();
+            var isValid = isPositionValidForDrag(position, draggedServerHeight, draggedServerId);
+            
+            clearDropHighlights();
+            
+            for (var u = position; u < position + draggedServerHeight && u <= rack.rackSize; u++) {
+                var unitEl = document.querySelector('.rack-unit[data-position="' + u + '"]');
+                if (unitEl) {
+                    unitEl.classList.add(isValid ? 'drop-target' : 'drop-invalid');
+                }
+            }
+            
+            return false;
+        }
+
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('drop-target', 'drop-invalid');
+        }
+
+        function handleDrop(event, position) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            if (!draggedServerId || !draggedServerRackId) return;
+            
+            clearDropHighlights();
+            
+            var targetRack = getCurrentRack();
+            var sourceRack = state.racks.find(function(r) { return r.id === draggedServerRackId; });
+            
+            if (!sourceRack) return;
+            
+            var server = sourceRack.servers.find(function(s) { return s.id === draggedServerId; });
+            if (!server) return;
+            
+            if (isPositionValidForDrag(position, server.height, server.id)) {
+                saveStateToHistory();
+                
+                if (sourceRack.id !== targetRack.id) {
+                    sourceRack.servers = sourceRack.servers.filter(function(s) { return s.id !== server.id; });
+                    
+                    if (sourceRack.selectedServer && sourceRack.selectedServer.id === server.id) {
+                        sourceRack.selectedServer = null;
+                    }
+                    
+                    server.position = position;
+                    targetRack.servers.push(server);
+                    
+                    var moveMessage = currentLang === 'it'
+                        ? 'Server "' + server.name + '" spostato da ' + sourceRack.rackTitle + ' a ' + targetRack.rackTitle
+                        : 'Server "' + server.name + '" moved from ' + sourceRack.rackTitle + ' to ' + targetRack.rackTitle;
+                    
+                    setTimeout(function() {
+                        alert(moveMessage);
+                    }, 100);
+                } else {
+                    server.position = position;
+                    
+                    if (targetRack.selectedServer && targetRack.selectedServer.id === server.id) {
+                        targetRack.selectedServer.position = position;
+                    }
+                }
+                
+                render();
+            } else {
+                var message = currentLang === 'it' 
+                    ? 'Impossibile spostare qui: spazio occupato o fuori dal rack!' 
+                    : 'Cannot move here: space occupied or outside rack!';
+                alert(message);
+            }
+            
+            return false;
+        }
+
+        function isPositionValidForDrag(position, height, serverId) {
+            var targetRack = getCurrentRack();
+            
+            if (position < 1 || position + height - 1 > targetRack.rackSize) {
+                return false;
+            }
+            
+            for (var i = 0; i < targetRack.servers.length; i++) {
+                var server = targetRack.servers[i];
+                
+                if (server.id === serverId && targetRack.id === draggedServerRackId) continue;
+                
+                var serverStart = server.position;
+                var serverEnd = server.position + server.height - 1;
+                var newStart = position;
+                var newEnd = position + height - 1;
+                
+                if (!(newEnd < serverStart || newStart > serverEnd)) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        function clearDropHighlights() {
+            var units = document.querySelectorAll('.rack-unit');
+            for (var i = 0; i < units.length; i++) {
+                units[i].classList.remove('drop-target', 'drop-invalid');
+            }
+        }
+
+        render();
+    </script>
+</body>
+</html>
