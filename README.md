@@ -1,5 +1,7 @@
 # Gestione Rack con PDU
 
+**Italiano** · [English](README.en.md)
+
 Strumento a file singolo per la progettazione e la **verifica elettrica** dei rack di
 sala dati: distribuzione del carico sulle PDU, bilanciamento delle fasi, verifica
 della ridondanza N+1 e dimensionamento delle sorgenti a monte.
@@ -47,7 +49,8 @@ tranquille, ma in caso di guasto una delle due va al 90%.
   calcolato sul caso peggiore.
 - Trascinamento degli apparati nel rack, con scambio di posizione tra apparati di
   pari altezza.
-- Interfaccia italiano/inglese, annulla/ripeti, ricerca e filtri.
+- Interfaccia italiano/inglese: la lingua iniziale segue quella del browser ed è
+  commutabile in ogni momento. Annulla/ripeti, ricerca e filtri.
 - Salvataggio su file JSON, esportazione CSV, stampa del singolo rack o di tutti.
 
 ## Uso online

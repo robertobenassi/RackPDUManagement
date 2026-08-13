@@ -66,7 +66,8 @@
       scambio di posizione tra apparati di pari altezza.
     - Pannello parametri in gruppi tematici, con spiegazione per ogni campo,
       anteprima dell effetto sui calcoli e ripristino dei valori predefiniti.
-    - Interfaccia italiano/inglese, annulla/ripeti, ricerca e filtri.
+    - Interfaccia italiano/inglese con lingua iniziale dedotta dal browser,
+      annulla/ripeti, ricerca e filtri.
     - Salvataggio su file JSON, esportazione CSV, stampa del singolo rack o di
       tutti, salvataggio automatico locale.
 
@@ -625,14 +626,29 @@ const I18N = {
     riskLabel: 'At risk on feed loss', results: 'results'
   }
 };
-let currentLang = 'it';
+/* Lingua iniziale dedotta dal browser: italiano a chi ha l'italiano tra le
+   lingue preferite, inglese a tutti gli altri. Resta sempre commutabile a mano. */
+function detectLang() {
+  try {
+    const list = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] && String(list[i]).toLowerCase().indexOf('it') === 0) return 'it';
+    }
+  } catch (e) {}
+  return 'en';
+}
+let currentLang = detectLang();
 const t = k => (I18N[currentLang] && I18N[currentLang][k]) || I18N.it[k] || k;
 
+function syncLangUI() {
+  document.documentElement.lang = currentLang;
+  const it = document.getElementById('flag-it'), en = document.getElementById('flag-en');
+  if (it) it.classList.toggle('active', currentLang === 'it');
+  if (en) en.classList.toggle('active', currentLang === 'en');
+}
 function toggleLanguage() {
   currentLang = currentLang === 'it' ? 'en' : 'it';
-  document.documentElement.lang = currentLang;
-  document.getElementById('flag-it').classList.toggle('active', currentLang === 'it');
-  document.getElementById('flag-en').classList.toggle('active', currentLang === 'en');
+  syncLangUI();
   applyStaticTranslations();
   render();
 }
@@ -758,7 +774,7 @@ function newRack(index, sources) {
 }
 const state = {
   schema: 1,
-  mainTitle: I18N.it.mainTitleDefault,
+  mainTitle: I18N[currentLang].mainTitleDefault,
   settings: Object.assign({}, DEFAULT_SETTINGS),
   currentRackId: null,
   sources: [],
@@ -2140,7 +2156,7 @@ function migPdu(p, side, fallbackName) {
 function migrate(data) {
   if (!data || !Array.isArray(data.racks) || !data.racks.length) throw new Error('invalid');
   const out = {
-    mainTitle: String(data.mainTitle || I18N.it.mainTitleDefault).slice(0, 60),
+    mainTitle: String(data.mainTitle || I18N[currentLang].mainTitleDefault).slice(0, 60),
     settings: Object.assign({}, DEFAULT_SETTINGS, data.settings || {}),
     sources: [], racks: [], currentRackId: null
   };
@@ -2281,6 +2297,7 @@ function restoreAutosave() {
   } catch (e) { safeStore.del(AUTOSAVE_KEY); return false; }
 }
 function init() {
+  syncLangUI();
   applyStaticTranslations();
   const restored = restoreAutosave();
   if (!restored) {

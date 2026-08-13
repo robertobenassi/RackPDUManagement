@@ -41,6 +41,7 @@ Prima release pubblica.
   non valido e scambio di posizione tra apparati di pari altezza.
 - Pannello parametri in gruppi tematici, con una riga di spiegazione per ogni
   campo, anteprima dell'effetto sui calcoli e ripristino dei valori predefiniti.
-- Interfaccia italiano/inglese, annulla/ripeti, ricerca e filtri sugli apparati.
+- Interfaccia italiano/inglese, con lingua iniziale dedotta dal browser,
+  annulla/ripeti, ricerca e filtri sugli apparati.
 - Salvataggio su file JSON, esportazione CSV, stampa del singolo rack o di tutti,
   salvataggio automatico locale.
