@@ -1,0 +1,2307 @@
+<!DOCTYPE html>
+<!--
+    Gestione Rack con PDU - Rack PDU Management System
+    Copyright (C) 2025-2026 Roberto Benassi
+
+    DUAL LICENSE:
+
+    1. NON-COMMERCIAL USE:
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+    2. COMMERCIAL USE:
+    For commercial use, please contact the author for a commercial license.
+    Contact: info@robertobenassi.com
+
+    CHANGELOG:
+
+    Versione: 1 (2026-08-13):
+    - Prima release.
+
+    Funzionalita principali:
+
+    VERIFICA DI PROGETTO
+    - Verifica della ridondanza N+1: gli scenari di guasto (normale, perdita via A,
+      perdita via B) sono ricalcolati a ogni modifica su generale, fasi e
+      interruttori. Ogni barra di carico mostra il valore attuale e, con un
+      marcatore, quello che assumerebbe in caso di guasto. Verdetto per rack e
+      riepilogo globale di impianto.
+    - Alimentazione a monte, opzionale e disattivata di default: ogni PDU puo
+      dichiarare da quale sorgente e alimentata. Da qui derivano le topologie
+      reali: un solo UPS su entrambe le vie, due UPS indipendenti 2N, parallelo
+      N+1, UPS installato dentro il rack. Se le due vie risalgono alla stessa
+      sorgente il sistema segnala che la ridondanza e solo a valle. A modello
+      disattivato nulla di cio che sta sopra le PDU entra nei calcoli.
+    - Verifica di capacita delle sorgenti in kW e kVA separatamente, con autonomia
+      batteria stimata anche in condizioni di guasto.
+    - Prese: conteggio C13/C19 per lato e tipo spina per apparato (C14/C20), con
+      segnalazione delle prese insufficienti.
+
+    MOTORE DI CALCOLO
+    - Tensione fase-neutro e fattore di potenza configurabili.
+    - cosfi e fattore di contemporaneita a tre livelli: apparato, rack, progetto.
+      Un rack di storage puo avere un cosfi diverso da uno di server.
+    - Potenza attiva e apparente distinte (kW e kVA).
+    - Corrente di neutro: squilibrio vettoriale delle tre fasi piu contributo della
+      terza armonica, con contenuto armonico configurabile.
+    - Soglie di attenzione e allarme configurabili.
+    - Potenza termica (BTU/h), portata d aria richiesta e peso stimato per rack.
+
+    INTERFACCIA
+    - Gestione multi-rack (12U, 24U, 42U, 45U, 48U) con riepilogo globale.
+    - Libreria di profili PDU, con tutti i campi editabili.
+    - Ottimizzatore del bilanciamento con bin-packing a due livelli (fase e
+      interruttore) calcolato sul caso peggiore, su uno o entrambi i lati.
+    - Trascinamento degli apparati nel rack con evidenziazione del bersaglio e
+      scambio di posizione tra apparati di pari altezza.
+    - Pannello parametri in gruppi tematici, con spiegazione per ogni campo,
+      anteprima dell effetto sui calcoli e ripristino dei valori predefiniti.
+    - Interfaccia italiano/inglese, annulla/ripeti, ricerca e filtri.
+    - Salvataggio su file JSON, esportazione CSV, stampa del singolo rack o di
+      tutti, salvataggio automatico locale.
+
+    Author: Roberto Benassi
+    Website: https://www.robertobenassi.com
+-->
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rack &amp; PDU</title>
+<style>
+:root {
+  --bg: #eef1f5;
+  --card: #ffffff;
+  --ink: #111827;
+  --ink-2: #374151;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --line-2: #d1d5db;
+  --accent: #2563eb;
+  --accent-soft: #eff6ff;
+  --ok: #059669;
+  --warn: #d97706;
+  --alarm: #dc2626;
+  --ok-soft: #ecfdf5;
+  --warn-soft: #fffbeb;
+  --alarm-soft: #fef2f2;
+  --l1: #dc2626;
+  --l2: #ca8a04;
+  --l3: #2563eb;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 12px rgba(16,24,40,.06);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--ink); padding: 20px; line-height: 1.45;
+}
+.container { max-width: 1480px; margin: 0 auto; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- header ---------- */
+.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.lang-switcher { display: flex; gap: 6px; background: var(--card); padding: 8px 10px; border-radius: 8px; box-shadow: var(--shadow); cursor: pointer; font-size: .8rem; font-weight: 700; }
+.lang-flag { opacity: .35; transition: opacity .2s; }
+.lang-flag.active { opacity: 1; color: var(--accent); }
+.main-title-input { flex: 1; min-width: 220px; font-size: 1.35rem; font-weight: 700; border: none; background: var(--card); outline: none; padding: 11px 14px; border-radius: 8px; box-shadow: var(--shadow); color: var(--ink); }
+.rack-size-select, .btn-tool { font-size: .875rem; font-weight: 600; border: 1px solid var(--line-2); background: var(--card); color: var(--ink); padding: 11px 13px; border-radius: 8px; cursor: pointer; outline: none; box-shadow: var(--shadow); }
+.btn-tool:hover, .rack-size-select:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* ---------- tabs ---------- */
+.rack-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; background: var(--card); padding: 10px; border-radius: var(--radius); box-shadow: var(--shadow); }
+.rack-tab { padding: 7px 14px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--card); cursor: pointer; font-weight: 600; font-size: .85rem; transition: all .15s; white-space: nowrap; }
+.rack-tab:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rack-tab.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.rack-tab .tab-flag { font-size: .7rem; margin-left: 6px; }
+.btn-add-rack { padding: 7px 14px; border-radius: 7px; border: 1px dashed var(--ok); background: var(--card); color: var(--ok); cursor: pointer; font-weight: 700; font-size: .85rem; }
+.btn-add-rack:hover { background: var(--ok-soft); }
+.btn-remove-rack { margin-left: 8px; padding: 2px 7px; background: transparent; color: inherit; border: none; border-radius: 4px; cursor: pointer; font-size: .8rem; opacity: .7; }
+.btn-remove-rack:hover { background: rgba(0,0,0,.15); opacity: 1; }
+
+/* ---------- cards / summary ---------- */
+.panel { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+.panel-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.panel-title .sub { font-weight: 400; font-size: .8rem; color: var(--muted); }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.summary-card { background: #f8fafc; border-radius: 8px; padding: 11px 13px; border-left: 3px solid var(--accent); }
+.summary-card.ok { border-left-color: var(--ok); }
+.summary-card.warn { border-left-color: var(--warn); }
+.summary-card.alarm { border-left-color: var(--alarm); }
+.summary-card-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+.summary-card-value { font-size: 1.3rem; font-weight: 700; color: var(--ink); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.summary-card-detail { font-size: .74rem; color: var(--muted); margin-top: 3px; }
+
+/* ---------- layout ---------- */
+.grid-layout { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
+.col-pdu { grid-column: span 3; min-width: 0; }
+.col-rack { grid-column: span 4; min-width: 0; }
+.col-config { grid-column: span 2; min-width: 0; }
+
+/* ---------- PDU ---------- */
+.pdu-display { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pdu-name input { text-align: center; border: 1px solid var(--line); background: var(--card); outline: none; padding: 10px; font-size: .875rem; font-weight: 700; width: 100%; border-radius: 8px; box-shadow: var(--shadow); }
+.breaker-box { border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); color: #fff; min-width: 0; overflow: hidden; }
+.breaker-box.on { background: linear-gradient(160deg, #1f2937, #374151); }
+.breaker-box.off { background: linear-gradient(160deg, #9ca3af, #6b7280); }
+.breaker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; gap: 8px; }
+.breaker-title { font-size: .8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.breaker-controls { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-power, .btn-settings { padding: 6px; border-radius: 4px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background-color .3s; flex-shrink: 0; }
+.btn-power.on { background: #10b981; color: #fff; }
+.btn-power.on:hover { background: #059669; }
+.btn-power.off { background: #ef4444; color: #fff; }
+.btn-power.off:hover { background: #dc2626; }
+.btn-settings { background: var(--accent); color: #fff; }
+.btn-settings:hover { background: #1d4ed8; }
+/* stesso ingombro dell'icona SVG (16px), simbolo piu grande e centrato nel quadrato */
+.gear-glyph { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 20px; line-height: 1; overflow: visible; }
+.settings-panel { background: rgba(255,255,255,.1); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.settings-input { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: .75rem; }
+.settings-input:last-child { margin-bottom: 0; }
+.settings-input input, .settings-input select { width: 92px; border: 1px solid var(--line-2); border-radius: 5px; padding: 4px 6px; font-size: .78rem; color: var(--ink); background: #fff; }
+.settings-input select.wide { width: 100%; }
+.settings-note { font-size: .68rem; opacity: .75; margin-top: 6px; line-height: 1.3; }
+
+.load-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; font-size: .74rem; gap: 6px; }
+.load-value { font-weight: 700; white-space: nowrap; font-family: var(--mono); }
+.progress-bar { width: 100%; background: rgba(0,0,0,.18); border-radius: 999px; height: 14px; overflow: hidden; position: relative; }
+.progress-bar.light { background: #e5e7eb; }
+.progress-fill { height: 100%; border-radius: 999px; transition: width .25s; }
+.progress-fill.ok { background: var(--ok); }
+.progress-fill.warn { background: var(--warn); }
+.progress-fill.alarm { background: var(--alarm); }
+.progress-ghost { position: absolute; top: 0; bottom: 0; border-right: 2px solid rgba(17,24,39,.85); }
+.progress-ghost.over { border-right-color: var(--alarm); }
+.failover-line { font-size: .68rem; margin-top: 3px; display: flex; justify-content: space-between; gap: 6px; font-family: var(--mono); }
+.fo-ok { color: var(--ok); }
+.fo-warn { color: var(--warn); }
+.fo-alarm { color: var(--alarm); font-weight: 700; }
+
+.phase-box, .breaker-item { background: #fff; border-radius: 8px; padding: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); color: var(--ink); }
+.phase-box { margin-bottom: 7px; }
+.phase-box.disabled, .breaker-item.disabled { background: var(--line); opacity: .5; }
+.breakers-section { margin-top: 10px; background: #f8fafc; border-radius: 8px; padding: 8px; }
+.breakers-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: center; margin-bottom: 7px; color: var(--muted); }
+.breaker-item { font-size: .72rem; margin-bottom: 5px; }
+.breaker-item:last-child { margin-bottom: 0; }
+.chip-phase { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.outlet-row { display: flex; justify-content: space-between; font-size: .72rem; padding: 4px 0; border-top: 1px dashed var(--line); font-family: var(--mono); }
+.outlet-row.bad { color: var(--alarm); font-weight: 700; }
+.balance-box { background: #fff; border-radius: 8px; padding: 10px; color: var(--ink); text-align: center; }
+.balance-value { font-size: 1.3rem; font-weight: 700; font-family: var(--mono); }
+.balance-ok { color: var(--ok); } .balance-warn { color: var(--warn); } .balance-alarm { color: var(--alarm); }
+.btn-optimize { width: 100%; margin-top: 8px; padding: 7px; border: none; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600; font-size: .78rem; cursor: pointer; }
+.btn-optimize:hover { filter: brightness(1.08); }
+
+/* ---------- rack ---------- */
+.rack-container { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.rack-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+.rack-title-input { font-size: 1.05rem; font-weight: 700; border: none; background: transparent; outline: none; padding: 4px 6px; border-bottom: 2px solid transparent; min-width: 0; flex: 1; }
+.rack-title-input:focus { border-bottom-color: var(--accent); }
+.btn-add { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #fff; padding: 8px 12px; border-radius: 7px; border: none; cursor: pointer; font-weight: 600; font-size: .82rem; white-space: nowrap; }
+.btn-add:hover { filter: brightness(1.08); }
+.rack-units { border: 4px solid #1f2937; border-radius: 8px; background: #111827; padding: 7px; }
+.rack-unit { height: 24px; border-bottom: 1px solid #374151; display: flex; align-items: center; justify-content: center; font-size: .72rem; background: #f9fafb; position: relative; cursor: pointer; }
+.rack-unit:hover { background: var(--accent-soft); }
+.rack-unit-label { position: absolute; left: 5px; color: #9ca3af; font-size: .68rem; font-family: var(--mono); }
+/* riquadro interno: evidenzia il target senza spostare le righe durante il trascinamento */
+.rack-unit.drop-target { background: #bfdbfe; box-shadow: inset 0 0 0 2px var(--accent); }
+.rack-unit.drop-invalid { background: #fecaca; box-shadow: inset 0 0 0 2px var(--alarm); }
+.server-box { border: 2px solid var(--accent); background: #dbeafe; cursor: move; display: flex; align-items: center; justify-content: center; position: relative; }
+.server-box.dragging { opacity: .45; }
+.server-box:hover { filter: brightness(.97); }
+.server-box.selected { outline: 2px solid var(--ink); outline-offset: -2px; }
+.server-box.no-power { border-color: var(--alarm); background: #fee2e2; }
+.server-box.partial-power { border-color: var(--warn); background: #fef3c7; }
+.server-box.at-risk { border-color: var(--warn); background: #fde68a; }
+.server-box.dim { opacity: .28; }
+.server-info { text-align: center; padding: 0 6px; overflow: hidden; }
+.server-name { display: flex; align-items: center; gap: 6px; justify-content: center; font-weight: 700; font-size: .75rem; white-space: nowrap; }
+.server-details { font-size: .68rem; color: var(--ink-2); font-family: var(--mono); }
+.power-icon { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* ---------- config panel ---------- */
+.config-panel { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 6px; }
+.config-title { font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; }
+.btn-close { background: transparent; border: none; cursor: pointer; color: var(--muted); font-size: 1.1rem; line-height: 1; }
+.field { margin-bottom: 9px; }
+.field label { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 3px; }
+.field input, .field select { width: 100%; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; font-size: .82rem; color: var(--ink); background: #fff; }
+.field-row { display: flex; gap: 8px; }
+.field-row .field { flex: 1; }
+.checkbox-row { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: .82rem; font-weight: 600; }
+.checkbox-row input { width: 15px; height: 15px; }
+.btn-danger { width: 100%; padding: 8px; border: none; border-radius: 6px; background: var(--alarm); color: #fff; font-weight: 600; font-size: .82rem; cursor: pointer; margin-top: 6px; }
+.hint { font-size: .7rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+
+/* ---------- redundancy report ---------- */
+.verdict { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 8px; font-weight: 600; font-size: .86rem; margin-bottom: 12px; }
+.verdict.ok { background: var(--ok-soft); color: #065f46; border: 1px solid #a7f3d0; }
+.verdict.warn { background: var(--warn-soft); color: #92400e; border: 1px solid #fde68a; }
+.verdict.alarm { background: var(--alarm-soft); color: #991b1b; border: 1px solid #fecaca; }
+.verdict-icon { font-size: 1.15rem; }
+table.grid { width: 100%; border-collapse: collapse; font-size: .78rem; }
+table.grid th, table.grid td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; }
+table.grid th { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: #f8fafc; font-weight: 700; }
+table.grid td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+table.grid tr.scenario-head td { background: #f8fafc; font-weight: 700; }
+.cell-ok { color: var(--ok); } .cell-warn { color: var(--warn); font-weight: 700; } .cell-alarm { color: var(--alarm); font-weight: 700; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
+.badge.ok { background: var(--ok-soft); color: #065f46; }
+.badge.warn { background: var(--warn-soft); color: #92400e; }
+.badge.alarm { background: var(--alarm-soft); color: #991b1b; }
+
+/* ---------- sorgenti ---------- */
+.sources-off { padding: 12px 16px; }
+.sources-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.source-card { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px; background: #fff; }
+.source-card.warn { border-left-color: var(--warn); }
+.source-card.alarm { border-left-color: var(--alarm); }
+.source-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.source-name { font-weight: 700; font-size: .92rem; }
+.source-kind { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.source-row { display: flex; justify-content: space-between; font-size: .76rem; padding: 3px 0; font-family: var(--mono); }
+.source-row span:first-child { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--muted); }
+.source-feeds { font-size: .72rem; color: var(--muted); margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); line-height: 1.5; }
+.btn-mini { border: 1px solid var(--line-2); background: #fff; border-radius: 6px; padding: 3px 8px; font-size: .72rem; font-weight: 600; cursor: pointer; }
+.btn-mini:hover { border-color: var(--accent); background: var(--accent-soft); }
+.setting-group { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.setting-group-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-bottom: 10px; }
+.preview-box { background: var(--accent-soft); border: 1px solid #bfdbfe; border-radius: 8px; padding: 11px 13px; margin-bottom: 12px; }
+.preview-line { display: flex; justify-content: space-between; font-size: .8rem; padding: 2px 0; }
+.preview-line strong { font-family: var(--mono); }
+
+/* ---------- server list ---------- */
+table.server-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+table.server-table th, table.server-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; }
+table.server-table th { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: #f8fafc; font-weight: 700; }
+table.server-table td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+table.server-table tr:hover td { background: #f8fafc; }
+.empty-state { text-align: center; color: var(--muted); padding: 22px; font-size: .85rem; }
+
+/* ---------- search ---------- */
+.search-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.search-input { flex: 1; min-width: 180px; border: 1px solid var(--line-2); border-radius: 7px; padding: 8px 10px; font-size: .85rem; }
+.filter-chip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line-2); background: #fff; cursor: pointer; font-size: .76rem; font-weight: 600; }
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------- modal ---------- */
+.modal { display: none; position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+.modal.active { display: flex; }
+.modal-content { background: var(--card); border-radius: 12px; box-shadow: 0 24px 48px rgba(0,0,0,.28); padding: 20px; width: 460px; max-width: 100%; max-height: 88vh; overflow-y: auto; }
+.modal-content.wide { width: 680px; }
+.modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 14px; }
+.modal-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.btn-secondary { padding: 8px 14px; border: 1px solid var(--line-2); background: #fff; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: .84rem; }
+.btn-primary { padding: 8px 14px; border: none; background: var(--accent); color: #fff; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: .84rem; }
+.comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.comparison-card { border: 1px solid var(--line); border-radius: 8px; padding: 11px; font-size: .8rem; }
+.comparison-card.optimized { border-color: var(--ok); background: var(--ok-soft); }
+.comparison-header { font-weight: 700; margin-bottom: 8px; font-size: .78rem; }
+.suggestion-item { background: #f8fafc; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; border-left: 3px solid var(--accent); font-size: .78rem; }
+
+/* ---------- footer / actions ---------- */
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0; }
+.btn-action { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--card); cursor: pointer; font-weight: 600; font-size: .83rem; box-shadow: var(--shadow); }
+.btn-action:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.btn-action:disabled { opacity: .4; cursor: not-allowed; }
+.file-input-hidden { display: none; }
+.license-box { text-align: center; font-size: .76rem; color: var(--muted); padding: 16px; border-top: 1px solid var(--line); margin-top: 8px; line-height: 1.6; }
+.license-box a { color: var(--accent); text-decoration: none; }
+
+/* ---------- toast ---------- */
+#toastHost { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.toast { background: #111827; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: .84rem; box-shadow: 0 8px 24px rgba(0,0,0,.25); animation: toastIn .18s ease-out; max-width: 90vw; }
+.toast.ok { background: #065f46; } .toast.err { background: #991b1b; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1100px) {
+  .col-pdu, .col-rack, .col-config { grid-column: span 12; }
+  .comparison-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- print ---------- */
+@media print {
+  body { background: #fff; padding: 0; font-size: 11px; }
+  .no-print { display: none !important; }
+  .panel, .rack-container, .config-panel, .breaker-box { box-shadow: none; border: 1px solid #ccc; }
+  .breaker-box.on { background: #f3f4f6 !important; color: #111 !important; }
+  .breaker-box.off { background: #e5e7eb !important; color: #111 !important; }
+  .grid-layout { display: grid; grid-template-columns: repeat(12, 1fr); }
+  .print-page { page-break-after: always; }
+  .print-page:last-child { page-break-after: auto; }
+  table.grid th, table.server-table th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topbar no-print">
+    <div class="lang-switcher" onclick="toggleLanguage()" title="IT / EN">
+      <span class="lang-flag active" id="flag-it">IT</span><span>/</span><span class="lang-flag" id="flag-en">EN</span>
+    </div>
+    <input type="text" class="main-title-input" id="mainTitleInput" maxlength="60" onchange="updateMainTitle(this.value)">
+    <select class="rack-size-select" id="rackSizeSelect" onchange="changeRackSize(this.value)">
+      <option value="12">12U</option><option value="24">24U</option><option value="42">42U</option>
+      <option value="45">45U</option><option value="48">48U</option>
+    </select>
+    <button class="btn-tool" onclick="openSettingsModal()" data-i18n="electricalSettings">Parametri elettrici</button>
+  </div>
+
+  <div id="sourcesHost"></div>
+  <div id="rackTabsHost"></div>
+  <div id="globalSummaryHost"></div>
+
+  <div class="panel no-print" id="searchPanel">
+    <div class="search-row">
+      <input type="text" class="search-input" id="searchInput" oninput="handleSearch(this.value)" data-i18n-placeholder="searchPlaceholder">
+      <button class="filter-chip active" id="chip-all" onclick="setFilter('all')" data-i18n="filterAll">Tutti</button>
+      <button class="filter-chip" id="chip-dual" onclick="setFilter('dual')" data-i18n="filterDual">Ridondati</button>
+      <button class="filter-chip" id="chip-single" onclick="setFilter('single')" data-i18n="filterSingle">Non ridondati</button>
+      <button class="filter-chip" id="chip-risk" onclick="setFilter('risk')" data-i18n="filterRisk">A rischio</button>
+      <span class="hint" id="filterResults" style="margin:0"></span>
+    </div>
+  </div>
+
+  <div class="grid-layout">
+    <div class="col-pdu" id="pdu-left"></div>
+    <div class="col-rack" id="rack-col"></div>
+    <div class="col-pdu" id="pdu-right"></div>
+    <div class="col-config" id="config-panel"></div>
+  </div>
+
+  <div id="redundancyHost"></div>
+
+  <div class="panel" id="environmentHost"></div>
+
+  <div class="panel">
+    <div class="panel-title"><span data-i18n="serverListTitle">Elenco apparati e collegamenti</span></div>
+    <div id="serverListContent"></div>
+  </div>
+
+  <div class="actions no-print">
+    <button class="btn-action" onclick="printCurrentRack()"><span data-i18n="printCurrentRack">Stampa rack corrente</span></button>
+    <button class="btn-action" onclick="printAllRacks()"><span data-i18n="printAllRacks">Stampa tutti i rack</span></button>
+    <button class="btn-action" id="undoBtn" onclick="undo()" disabled title="Ctrl+Z"><span data-i18n="undo">Annulla</span></button>
+    <button class="btn-action" id="redoBtn" onclick="redo()" disabled title="Ctrl+Y"><span data-i18n="redo">Ripeti</span></button>
+    <button class="btn-action" onclick="saveConfiguration()"><span data-i18n="downloadConfig">Scarica configurazione</span></button>
+    <input type="file" id="fileInput" class="file-input-hidden" accept=".json" onchange="loadConfiguration(event)">
+    <button class="btn-action" onclick="document.getElementById('fileInput').click()"><span data-i18n="loadConfig">Carica configurazione</span></button>
+    <button class="btn-action" onclick="exportCsv()"><span data-i18n="exportCsv">Esporta CSV</span></button>
+  </div>
+
+  <div class="license-box">
+    <div data-i18n="licenseText">Quest'opera e distribuita con doppia licenza</div>
+    <div>&copy; 2025-2026 Roberto Benassi &middot; <span class="num">v1</span></div>
+    <div><strong data-i18n="nonCommercialUse">Uso non commerciale:</strong> <span data-i18n="gplLicense">GPL-3.0 (gratuito e open source)</span></div>
+    <div><strong data-i18n="commercialUse">Uso commerciale:</strong> <span data-i18n="contactAuthor">contattare l'autore per licenza commerciale</span></div>
+    <div><a href="https://www.robertobenassi.com" target="_blank" rel="noopener">robertobenassi.com</a></div>
+  </div>
+</div>
+
+<div class="modal" id="addServerModal"><div class="modal-content">
+  <div class="modal-title" data-i18n="addNewServer">Aggiungi apparato</div>
+  <div id="addServerForm"></div>
+</div></div>
+
+<div class="modal" id="optimizationModal"><div class="modal-content wide">
+  <div class="modal-title" data-i18n="balanceOptimization">Ottimizzazione bilanciamento</div>
+  <div id="optimizationContent"></div>
+</div></div>
+
+<div class="modal" id="settingsModal"><div class="modal-content">
+  <div class="modal-title" data-i18n="electricalSettings">Parametri elettrici</div>
+  <div id="settingsContent"></div>
+</div></div>
+
+<div class="modal" id="sourceModal"><div class="modal-content">
+  <div class="modal-title" data-i18n="editSource">Sorgente</div>
+  <div id="sourceContent"></div>
+</div></div>
+
+<div class="modal" id="rackParamsModal"><div class="modal-content">
+  <div class="modal-title" data-i18n="rackParams">Parametri del rack</div>
+  <div id="rackParamsContent"></div>
+</div></div>
+
+<div id="toastHost"></div>
+<script>
+/* =========================================================================
+   1. INTERNAZIONALIZZAZIONE
+   ========================================================================= */
+const I18N = {
+  it: {
+    mainTitleDefault: 'Gestione Rack con PDU',
+    electricalSettings: 'Parametri elettrici', searchPlaceholder: 'Cerca apparato...',
+    filterAll: 'Tutti', filterDual: 'Ridondati', filterSingle: 'Non ridondati', filterRisk: 'A rischio',
+    serverListTitle: 'Elenco apparati e collegamenti', printCurrentRack: 'Stampa rack corrente',
+    printAllRacks: 'Stampa tutti i rack', undo: 'Annulla', redo: 'Ripeti',
+    downloadConfig: 'Scarica configurazione', loadConfig: 'Carica configurazione', exportCsv: 'Esporta CSV',
+    licenseText: "Quest'opera e distribuita con doppia licenza", nonCommercialUse: 'Uso non commerciale:',
+    gplLicense: 'GPL-3.0 (gratuito e open source)', commercialUse: 'Uso commerciale:',
+    contactAuthor: "contattare l'autore per licenza commerciale",
+    addNewServer: 'Aggiungi apparato', balanceOptimization: 'Ottimizzazione bilanciamento',
+    addRack: '+ Rack', rack: 'Rack', confirmRemoveRack: 'Eliminare questo rack?',
+    globalSummary: 'Riepilogo impianto', apparatus: 'Apparati', totalPower: 'Potenza totale',
+    occupancy: 'Occupazione', worstCaseLabel: 'Caso peggiore', redundancy: 'Ridondanza',
+    pduModel: 'Profilo PDU', customPdu: 'Personalizzata', pduType: 'Tipo', threePhase: 'Trifase',
+    singlePhase: 'Monofase', mainBreaker: 'Interruttore generale', breakersPerPhase: 'Interruttori per fase',
+    breakerCurrent: 'Corrente interruttore', outletsC13: 'Prese C13', outletsC19: 'Prese C19',
+    phaseOfPdu: 'Fase di alimentazione', breakers: 'Interruttori', neutral: 'Neutro',
+    outlets: 'Prese', balance: 'Bilanciamento fasi', optimize: 'Ottimizza questo lato',
+    optimizeBoth: 'Ottimizza entrambi i lati',
+    excellent: 'Ottimo', good: 'Buono', acceptable: 'Accettabile', mediocre: 'Mediocre', critical: 'Critico',
+    scenarioNormal: 'Normale (A+B)', scenarioLeftOnly: 'Guasto lato B', scenarioRightOnly: 'Guasto lato A',
+    scenarioNone: 'Entrambe fuori servizio', scenarioFail: 'Guasto',
+    redundancyCheck: 'Verifica ridondanza N+1', scenario: 'Scenario', side: 'Lato',
+    mainLoad: 'Generale', worstPhase: 'Fase piu carica', worstBreaker: 'Interruttore piu carico',
+    lostApparatus: 'Apparati persi', status: 'Esito',
+    verdictOk: 'Ridondanza verificata: nessun sovraccarico in caso di guasto di una via.',
+    verdictWarn: 'Attenzione: in caso di guasto si superano le soglie di allarme impostate.',
+    verdictAlarm: 'Critico: in caso di guasto di una via si superano le portate nominali.',
+    verdictLost: 'apparati non ridondati verrebbero persi.',
+    environment: 'Carichi ambientali', thermal: 'Potenza termica', airflow: 'Portata aria richiesta',
+    weightTotal: 'Peso stimato', apparentPower: 'Potenza apparente',
+    serverConfig: 'Configurazione apparato', selectServerToConfig: 'Seleziona un apparato dal rack.',
+    name: 'Nome', position: 'Posizione (U)', height: 'Altezza (U)', power: 'Potenza di calcolo (W)',
+    nameplate: 'Potenza di targa (W)', weight: 'Peso (kg)', plug: 'Spina', powerFactorField: 'cos\u03c6 (opzionale)',
+    dualPower: 'Alimentazione ridondata (A+B)', pduSide: 'Lato PDU', left: 'Sinistra', right: 'Destra',
+    leftPhase: 'Fase sinistra', leftBreaker: 'Interruttore sinistro', rightPhase: 'Fase destra',
+    rightBreaker: 'Interruttore destro', phaseField: 'Fase', breakerField: 'Interruttore',
+    deleteServer: 'Elimina apparato', add: 'Aggiungi', cancel: 'Annulla', close: 'Chiudi', apply: 'Applica',
+    invalidPosition: 'Posizione non valida o gia occupata.',
+    serverCol: 'Apparato', positionCol: 'Pos.', powerCol: 'Potenza', typeCol: 'Alimentazione',
+    connectionsCol: 'Collegamenti', single: 'Singola', dual: 'Ridondata', noServers: 'Nessun apparato inserito.',
+    current: 'Attuale', optimized: 'Ottimizzato', suggestedActions: 'Interventi suggeriti',
+    moveFrom: 'da', alreadyOptimal: 'Distribuzione gia ottimale', noChangesNeeded: 'Nessuna modifica necessaria.',
+    optimizationApplied: 'Ottimizzazione applicata', reconfigured: 'collegamenti riconfigurati',
+    voltageLN: 'Tensione fase-neutro (V)', powerFactorGlobal: 'cos\u03c6 di riferimento',
+    h3Percent: 'Contenuto 3a armonica (%)', warnPct: 'Soglia attenzione (%)', alarmPct: 'Soglia allarme (%)',
+    deltaT: 'Delta T aria (K)', rackTare: 'Tara rack (kg)', diversity: 'Fattore di contemporaneita (%)',
+    settingsHint: 'I parametri valgono per tutti i rack del progetto e influenzano ogni calcolo di corrente.',
+    saved: 'Configurazione scaricata', loaded: 'Configurazione caricata',
+    invalidFile: 'File non valido: struttura non riconosciuta.',
+    autosaveOn: 'Sessione ripristinata dal salvataggio automatico.',
+    sourcesTitle: 'Alimentazione a monte', addSource: '+ Sorgente', sourceName: 'Nome',
+    useSources: 'Modella l\'alimentazione a monte', sourcesActivate: 'Attiva',
+    sourcesDeactivate: 'Disattiva', sourcesCollapse: 'Riduci', sourcesExpand: 'Espandi',
+    sourcesOff: 'Analisi limitata al rack: le due vie sono considerate indipendenti.',
+    sourcesOffHint: 'Attivala solo se vuoi modellare UPS e quadri a monte. Se la verifica a monte l\'hai gia fatta altrove, lasciala disattivata: nulla di quanto sta sopra le PDU entra nei calcoli.',
+    sourcesOn: 'sorgenti nei calcoli',
+    sourceKind: 'Tipo', kindUps: 'UPS', kindGrid: 'Rete / quadro', kindGen: 'Gruppo elettrogeno',
+    units: 'Unita in parallelo', redundant: 'Ridondanza N+1', kvaUnit: 'Taglia unitaria (kVA)',
+    outPf: 'cos\u03c6 di uscita', location: 'Posizione', room: 'Sala', inRack: 'Nel rack',
+    autonomyMin: 'Autonomia dichiarata (min)', refLoadPct: 'Al carico di riferimento (%)',
+    capacity: 'Capacita', loadNormal: 'Carico normale', loadWorst: 'Caso peggiore',
+    autonomy: 'Autonomia stimata', feeds: 'Alimenta', noFeeds: 'Nessuna PDU collegata',
+    poweredBy: 'Alimentata da', deleteSource: 'Elimina sorgente',
+    confirmDeleteSource: 'Eliminare questa sorgente? Le PDU collegate resteranno senza alimentazione dichiarata.',
+    sharedSource: 'Le due vie risalgono alla stessa sorgente: la ridondanza e solo a valle, non di sorgente.',
+    sourceOverload: 'Sorgente oltre la capacita nel caso peggiore.',
+    editSource: 'Sorgente', activeUnits: 'unita attive', estimate: 'stima',
+    rackParams: 'Parametri del rack', rackPf: 'cos\u03c6 del rack',
+    rackDiversity: 'Contemporaneita del rack (%)', rackTareField: 'Tara del rack (kg)',
+    inherited: 'vuoto = valore di progetto', minutes: 'min', projectValue: 'di progetto',
+    grpNetwork: 'Rete', grpLoad: 'Carico', grpThresholds: 'Soglie e ambiente',
+    resetDefaults: 'Ripristina predefiniti', previewTitle: 'Effetto sui calcoli',
+    previewLine: 'Un apparato da 400 W assorbe', previewNeutral: 'Neutro a fasi bilanciate su 10 A per fase',
+    batteryExponent: 'Esponente di scarica batteria',
+    hintVoltage: 'Tensione tra fase e neutro a cui sono collegati gli apparati. Abbassarla aumenta la corrente a parita di potenza.',
+    hintPf: 'Rapporto tra potenza attiva e apparente. Piu e basso, piu corrente serve per gli stessi watt. Vale per gli apparati e i rack che non hanno un valore proprio.',
+    hintH3: 'Gli alimentatori switching caricano il neutro anche a fasi perfettamente bilanciate. Se non hai misure sul campo, lascia il valore predefinito.',
+    hintDiversity: 'Quanta parte della potenza dichiarata consideri assorbita davvero e in contemporanea. 100% e il caso piu cautelativo.',
+    hintWarn: 'Sopra questa percentuale il carico viene segnalato in giallo.',
+    hintAlarm: 'Sopra questa percentuale il carico viene segnalato in rosso, ben prima di arrivare alla portata nominale.',
+    hintDeltaT: 'Differenza di temperatura tra aria in ingresso e in uscita dal rack, usata per calcolare la portata.',
+    hintTare: 'Peso del rack vuoto, sommato a quello degli apparati. Puo essere ridefinito rack per rack.',
+    hintExponent: 'Le batterie rendono meno se scaricate piu in fretta. Serve a stimare l autonomia a carichi diversi da quello dichiarato: e una stima, va confrontata con le curve del costruttore.',
+    outletShortage: 'prese insufficienti', ofLabel: 'di', freeU: 'U libere',
+    riskLabel: 'A rischio in caso di guasto', results: 'risultati'
+  },
+  en: {
+    mainTitleDefault: 'Rack & PDU Management',
+    electricalSettings: 'Electrical settings', searchPlaceholder: 'Search device...',
+    filterAll: 'All', filterDual: 'Redundant', filterSingle: 'Single-corded', filterRisk: 'At risk',
+    serverListTitle: 'Device list and connections', printCurrentRack: 'Print current rack',
+    printAllRacks: 'Print all racks', undo: 'Undo', redo: 'Redo',
+    downloadConfig: 'Download configuration', loadConfig: 'Load configuration', exportCsv: 'Export CSV',
+    licenseText: 'This work is released under a dual license', nonCommercialUse: 'Non-commercial use:',
+    gplLicense: 'GPL-3.0 (free and open source)', commercialUse: 'Commercial use:',
+    contactAuthor: 'contact the author for a commercial license',
+    addNewServer: 'Add device', balanceOptimization: 'Phase balance optimization',
+    addRack: '+ Rack', rack: 'Rack', confirmRemoveRack: 'Delete this rack?',
+    globalSummary: 'Installation summary', apparatus: 'Devices', totalPower: 'Total power',
+    occupancy: 'Occupancy', worstCaseLabel: 'Worst case', redundancy: 'Redundancy',
+    pduModel: 'PDU profile', customPdu: 'Custom', pduType: 'Type', threePhase: 'Three-phase',
+    singlePhase: 'Single-phase', mainBreaker: 'Main breaker', breakersPerPhase: 'Breakers per phase',
+    breakerCurrent: 'Breaker rating', outletsC13: 'C13 outlets', outletsC19: 'C19 outlets',
+    phaseOfPdu: 'Supply phase', breakers: 'Breakers', neutral: 'Neutral',
+    outlets: 'Outlets', balance: 'Phase balance', optimize: 'Optimize this side',
+    optimizeBoth: 'Optimize both sides',
+    excellent: 'Excellent', good: 'Good', acceptable: 'Acceptable', mediocre: 'Poor', critical: 'Critical',
+    scenarioNormal: 'Normal (A+B)', scenarioLeftOnly: 'Side B failure', scenarioRightOnly: 'Side A failure',
+    scenarioNone: 'Both feeds lost', scenarioFail: 'Loss of',
+    redundancyCheck: 'N+1 redundancy check', scenario: 'Scenario', side: 'Side',
+    mainLoad: 'Main', worstPhase: 'Highest phase', worstBreaker: 'Highest breaker',
+    lostApparatus: 'Devices lost', status: 'Result',
+    verdictOk: 'Redundancy verified: no overload on loss of either feed.',
+    verdictWarn: 'Warning: alarm thresholds are exceeded on loss of a feed.',
+    verdictAlarm: 'Critical: rated capacity is exceeded on loss of a feed.',
+    verdictLost: 'single-corded devices would be lost.',
+    environment: 'Environmental loads', thermal: 'Heat load', airflow: 'Required airflow',
+    weightTotal: 'Estimated weight', apparentPower: 'Apparent power',
+    serverConfig: 'Device configuration', selectServerToConfig: 'Select a device in the rack.',
+    name: 'Name', position: 'Position (U)', height: 'Height (U)', power: 'Design power (W)',
+    nameplate: 'Nameplate power (W)', weight: 'Weight (kg)', plug: 'Plug', powerFactorField: 'PF (optional)',
+    dualPower: 'Dual-corded (A+B)', pduSide: 'PDU side', left: 'Left', right: 'Right',
+    leftPhase: 'Left phase', leftBreaker: 'Left breaker', rightPhase: 'Right phase',
+    rightBreaker: 'Right breaker', phaseField: 'Phase', breakerField: 'Breaker',
+    deleteServer: 'Delete device', add: 'Add', cancel: 'Cancel', close: 'Close', apply: 'Apply',
+    invalidPosition: 'Invalid or already occupied position.',
+    serverCol: 'Device', positionCol: 'Pos.', powerCol: 'Power', typeCol: 'Feed',
+    connectionsCol: 'Connections', single: 'Single', dual: 'Dual', noServers: 'No devices yet.',
+    current: 'Current', optimized: 'Optimized', suggestedActions: 'Suggested actions',
+    moveFrom: 'from', alreadyOptimal: 'Distribution already optimal', noChangesNeeded: 'No change needed.',
+    optimizationApplied: 'Optimization applied', reconfigured: 'connections reconfigured',
+    voltageLN: 'Line-to-neutral voltage (V)', powerFactorGlobal: 'Reference power factor',
+    h3Percent: '3rd harmonic content (%)', warnPct: 'Warning threshold (%)', alarmPct: 'Alarm threshold (%)',
+    deltaT: 'Air delta T (K)', rackTare: 'Rack tare (kg)', diversity: 'Diversity factor (%)',
+    settingsHint: 'These parameters apply to every rack in the project and drive all current calculations.',
+    saved: 'Configuration downloaded', loaded: 'Configuration loaded',
+    invalidFile: 'Invalid file: unrecognised structure.',
+    autosaveOn: 'Session restored from autosave.',
+    sourcesTitle: 'Upstream power', addSource: '+ Source', sourceName: 'Name',
+    useSources: 'Model upstream power', sourcesActivate: 'Enable',
+    sourcesDeactivate: 'Disable', sourcesCollapse: 'Collapse', sourcesExpand: 'Expand',
+    sourcesOff: 'Rack-level analysis only: the two feeds are treated as independent.',
+    sourcesOffHint: 'Enable this only if you want to model upstream UPS and panels. If you have already done the upstream study elsewhere, leave it off: nothing above the PDUs enters the calculations.',
+    sourcesOn: 'sources in the analysis',
+    sourceKind: 'Type', kindUps: 'UPS', kindGrid: 'Mains / panel', kindGen: 'Generator',
+    units: 'Units in parallel', redundant: 'N+1 redundancy', kvaUnit: 'Unit rating (kVA)',
+    outPf: 'Output power factor', location: 'Location', room: 'Room', inRack: 'In rack',
+    autonomyMin: 'Declared runtime (min)', refLoadPct: 'At reference load (%)',
+    capacity: 'Capacity', loadNormal: 'Normal load', loadWorst: 'Worst case',
+    autonomy: 'Estimated runtime', feeds: 'Feeds', noFeeds: 'No PDU connected',
+    poweredBy: 'Fed from', deleteSource: 'Delete source',
+    confirmDeleteSource: 'Delete this source? Connected PDUs will have no declared supply.',
+    sharedSource: 'Both feeds trace back to the same source: redundancy is downstream only, not at source level.',
+    sourceOverload: 'Source beyond capacity in the worst case.',
+    editSource: 'Source', activeUnits: 'active units', estimate: 'estimate',
+    rackParams: 'Rack parameters', rackPf: 'Rack power factor',
+    rackDiversity: 'Rack diversity (%)', rackTareField: 'Rack tare (kg)',
+    inherited: 'empty = project value', minutes: 'min', projectValue: 'project value',
+    grpNetwork: 'Supply', grpLoad: 'Load', grpThresholds: 'Thresholds and environment',
+    resetDefaults: 'Restore defaults', previewTitle: 'Effect on calculations',
+    previewLine: 'A 400 W device draws', previewNeutral: 'Neutral with balanced phases at 10 A each',
+    batteryExponent: 'Battery discharge exponent',
+    hintVoltage: 'Line-to-neutral voltage the devices are connected to. Lowering it raises the current for the same power.',
+    hintPf: 'Ratio of real to apparent power. The lower it is, the more current the same watts require. Applies to devices and racks without their own value.',
+    hintH3: 'Switching power supplies load the neutral even with perfectly balanced phases. Without field measurements, leave the default.',
+    hintDiversity: 'How much of the declared power you consider actually drawn at the same time. 100% is the most conservative case.',
+    hintWarn: 'Above this percentage the load is flagged amber.',
+    hintAlarm: 'Above this percentage the load is flagged red, well before reaching rated capacity.',
+    hintDeltaT: 'Temperature difference between air entering and leaving the rack, used for airflow.',
+    hintTare: 'Weight of the empty rack, added to the devices. Can be overridden per rack.',
+    hintExponent: 'Batteries deliver less when discharged faster. Used to estimate runtime at loads other than the declared one: it is an estimate, check it against the manufacturer curves.',
+    outletShortage: 'outlets missing', ofLabel: 'of', freeU: 'U free',
+    riskLabel: 'At risk on feed loss', results: 'results'
+  }
+};
+let currentLang = 'it';
+const t = k => (I18N[currentLang] && I18N[currentLang][k]) || I18N.it[k] || k;
+
+function toggleLanguage() {
+  currentLang = currentLang === 'it' ? 'en' : 'it';
+  document.documentElement.lang = currentLang;
+  document.getElementById('flag-it').classList.toggle('active', currentLang === 'it');
+  document.getElementById('flag-en').classList.toggle('active', currentLang === 'en');
+  applyStaticTranslations();
+  render();
+}
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
+}
+
+/* =========================================================================
+   2. UTILITY (escape, id, formattazione, storage, toast)
+   ========================================================================= */
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ESC_MAP[c]);
+const attr = s => esc(s).replace(/\r?\n/g, ' ');
+
+function uid() {
+  try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+const num = (v, d) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(d === undefined ? 1 : d) : (0).toFixed(d === undefined ? 1 : d);
+};
+const clampNum = (v, min, max, fallback) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+};
+
+/* Salvataggio automatico: degrada in silenzio se lo storage non e disponibile
+   (es. iframe sandbox). L'applicazione resta pienamente funzionante. */
+const safeStore = (() => {
+  let ok = false, mem = {};
+  try { const k = '__rk_test__'; window.localStorage.setItem(k, '1'); window.localStorage.removeItem(k); ok = true; } catch (e) { ok = false; }
+  return {
+    available: ok,
+    get(k) { try { return ok ? window.localStorage.getItem(k) : (mem[k] || null); } catch (e) { return null; } },
+    set(k, v) { try { if (ok) window.localStorage.setItem(k, v); else mem[k] = v; } catch (e) {} },
+    del(k) { try { if (ok) window.localStorage.removeItem(k); else delete mem[k]; } catch (e) {} }
+  };
+})();
+const AUTOSAVE_KEY = 'rackPdu.v1.session';
+
+function toast(msg, kind) {
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => { el.remove(); }, 3200);
+}
+
+/* =========================================================================
+   3. LIBRERIA PDU (profili generici, tutti i campi restano editabili)
+   ========================================================================= */
+const PDU_LIBRARY = [
+  { id: 'custom' },
+  { id: '1f16',  type: '1F', mainBreaker: 16, bpp: 2, bc: 10, c13: 12, c19: 2 },
+  { id: '1f32',  type: '1F', mainBreaker: 32, bpp: 3, bc: 16, c13: 20, c19: 4 },
+  { id: '3f16',  type: '3F', mainBreaker: 16, bpp: 2, bc: 10, c13: 18, c19: 3 },
+  { id: '3f32',  type: '3F', mainBreaker: 32, bpp: 2, bc: 16, c13: 24, c19: 6 },
+  { id: '3f32h', type: '3F', mainBreaker: 32, bpp: 3, bc: 16, c13: 36, c19: 6 },
+  { id: '3f63',  type: '3F', mainBreaker: 63, bpp: 3, bc: 20, c13: 36, c19: 12 }
+];
+function pduProfileLabel(p) {
+  if (p.id === 'custom') return t('customPdu');
+  const kind = p.type === '3F' ? t('threePhase') : t('singlePhase');
+  return kind + ' ' + p.mainBreaker + ' A \u00b7 ' + p.bpp + '\u00d7' + p.bc + ' A \u00b7 ' + p.c13 + '\u00d7C13 + ' + p.c19 + '\u00d7C19';
+}
+function applyPduProfile(pdu, profileId) {
+  const p = PDU_LIBRARY.find(x => x.id === profileId);
+  pdu.model = profileId;
+  if (!p || p.id === 'custom') return;
+  pdu.type = p.type; pdu.mainBreaker = p.mainBreaker;
+  pdu.breakersPerPhase = p.bpp; pdu.breakerCurrent = p.bc;
+  pdu.c13 = p.c13; pdu.c19 = p.c19;
+}
+
+/* =========================================================================
+   4. STATO
+   ========================================================================= */
+const DEFAULT_SETTINGS = {
+  voltageLN: 230, powerFactor: 0.95, h3Percent: 15,
+  warnPct: 60, alarmPct: 80, deltaT: 12, rackTare: 120, diversity: 100,
+  batteryExponent: 1.35,
+  useSources: false, sourcesCollapsed: false
+};
+/* Interruttore generale della modellazione a monte: se spento, nulla di cio che
+   sta sopra le PDU influenza scenari, verdetti o riepiloghi. */
+const sourcesActive = () => !!state.settings.useSources;
+const PHASE_COLORS = { red: 'var(--l1)', yellow: 'var(--l2)', blue: 'var(--l3)' };
+const PDU_CONFIG = {
+  left: { phases: [{ id: 'L1', name: 'L1', color: 'red' }, { id: 'L2', name: 'L2', color: 'yellow' }, { id: 'L3', name: 'L3', color: 'blue' }] },
+  right: { phases: [{ id: 'R1', name: 'L1', color: 'red' }, { id: 'R2', name: 'L2', color: 'yellow' }, { id: 'R3', name: 'L3', color: 'blue' }] }
+};
+
+function newPdu(side, label, sourceId) {
+  const pdu = { name: label, model: '3f32', type: '3F', singlePhase: side === 'left' ? 'L1' : 'R1', on: true, showSettings: false, sourceId: sourceId || null };
+  applyPduProfile(pdu, '3f32');
+  return pdu;
+}
+/* Sorgente a monte. La stessa struttura descrive tutte le topologie:
+   - un solo UPS su entrambe le vie  -> le due PDU puntano allo stesso id
+   - due UPS indipendenti (2N)       -> id diversi
+   - parallelo N+1                   -> units > 1 con redundant = true
+   - UPS installato nel rack         -> location = id del rack           */
+function newSource(name, kind) {
+  return {
+    id: uid(), name: name, kind: kind || 'ups',
+    units: 1, redundant: false, kvaUnit: 20, outPf: 1,
+    location: 'room',
+    autonomyMin: 10, refLoadPct: 100
+  };
+}
+function newRack(index, sources) {
+  const l = sources && sources[0] ? sources[0].id : null;
+  const r = sources && sources[1] ? sources[1].id : (sources && sources[0] ? sources[0].id : null);
+  return {
+    id: uid(), rackTitle: t('rack') + ' ' + index, rackSize: 42, servers: [], selectedServerId: null,
+    powerFactor: null, diversity: null, tare: null,
+    pduLeft: newPdu('left', 'PDU A', l), pduRight: newPdu('right', 'PDU B', r)
+  };
+}
+const state = {
+  schema: 1,
+  mainTitle: I18N.it.mainTitleDefault,
+  settings: Object.assign({}, DEFAULT_SETTINGS),
+  currentRackId: null,
+  sources: [],
+  racks: []
+};
+const history = { past: [], future: [], max: 60 };
+const searchFilter = { term: '', filter: 'all', matched: new Set() };
+
+const getCurrentRack = () => state.racks.find(r => r.id === state.currentRackId) || state.racks[0];
+const getSelectedServer = rack => rack.servers.find(s => s.id === rack.selectedServerId) || null;
+
+function snapshot() {
+  return JSON.parse(JSON.stringify({ mainTitle: state.mainTitle, settings: state.settings, currentRackId: state.currentRackId, sources: state.sources, racks: state.racks }));
+}
+function restore(snap) {
+  state.mainTitle = snap.mainTitle; state.settings = snap.settings;
+  state.currentRackId = snap.currentRackId; state.sources = snap.sources || []; state.racks = snap.racks;
+}
+const getSource = id => state.sources.find(s => s.id === id) || null;
+function saveStateToHistory() {
+  history.past.push(snapshot());
+  if (history.past.length > history.max) history.past.shift();
+  history.future = [];
+}
+function undo() {
+  if (!history.past.length) return;
+  history.future.push(snapshot());
+  restore(history.past.pop());
+  render();
+}
+function redo() {
+  if (!history.future.length) return;
+  history.past.push(snapshot());
+  restore(history.future.pop());
+  render();
+}
+
+/* =========================================================================
+   5. MOTORE DI CALCOLO
+   ========================================================================= */
+const sideKey = side => (side === 'left' ? 'pduLeft' : 'pduRight');
+const getPdu = (rack, side) => rack[sideKey(side)];
+
+function getAvailablePhases(rack, side) {
+  const pdu = getPdu(rack, side);
+  const phases = PDU_CONFIG[side].phases;
+  return pdu.type === '1F' ? phases.filter(p => p.id === pdu.singlePhase) : phases;
+}
+function getMappedPhase(rack, side, phaseId) {
+  const pdu = getPdu(rack, side);
+  return pdu.type === '1F' ? pdu.singlePhase : phaseId;
+}
+function getAvailableBreakers(rack, side) {
+  const pdu = getPdu(rack, side);
+  const prefix = side === 'left' ? 'LB' : 'RB';
+  const bpp = pdu.breakersPerPhase || 2;
+  const bc = pdu.breakerCurrent || 10;
+  const out = [];
+  const phases = pdu.type === '1F' ? [{ id: pdu.singlePhase }] : PDU_CONFIG[side].phases;
+  phases.forEach((ph, i) => {
+    for (let j = 0; j < bpp; j++) {
+      const n = i * bpp + j + 1;
+      out.push({ id: prefix + n, name: 'C' + n, phase: ph.id, maxCurrent: bc });
+    }
+  });
+  return out;
+}
+function breakersOfPhase(rack, side, phaseId) {
+  const mapped = getMappedPhase(rack, side, phaseId);
+  return getAvailableBreakers(rack, side).filter(b => b.phase === mapped);
+}
+
+/* Riallinea fasi/interruttori dopo una modifica di configurazione PDU:
+   evita riferimenti orfani (bug tipico quando si cambia tipo o numero poli). */
+function normalizeAssignments(rack) {
+  ['left', 'right'].forEach(side => {
+    const phases = getAvailablePhases(rack, side).map(p => p.id);
+    const breakers = getAvailableBreakers(rack, side);
+    const ids = breakers.map(b => b.id);
+    const pKey = side === 'left' ? 'leftPhase' : 'rightPhase';
+    const bKey = side === 'left' ? 'leftBreaker' : 'rightBreaker';
+    rack.servers.forEach(sv => {
+      if (phases.indexOf(sv[pKey]) === -1) sv[pKey] = phases[0];
+      const pool = breakersOfPhase(rack, side, sv[pKey]);
+      if (ids.indexOf(sv[bKey]) === -1 || !pool.some(b => b.id === sv[bKey])) {
+        sv[bKey] = pool.length ? pool[0].id : (ids[0] || null);
+      }
+    });
+  });
+}
+
+/* Catena a tre livelli: valore dell'apparato, poi del rack, poi di progetto. */
+const serverPf = (sv, rack) => (sv && sv.pf > 0) ? sv.pf : rackPf(rack);
+const rackPf = rack => (rack && rack.powerFactor > 0) ? rack.powerFactor : (state.settings.powerFactor || 1);
+const diversity = rack => ((rack && rack.diversity > 0) ? rack.diversity : (state.settings.diversity || 100)) / 100;
+const rackTare = rack => (rack && rack.tare !== null && rack.tare !== undefined) ? rack.tare : (state.settings.rackTare || 0);
+const pfSource = (sv, rack) => (sv && sv.pf > 0) ? 'server' : (rack && rack.powerFactor > 0) ? 'rack' : 'project';
+const legWatts = (sv, share, rack) => (Number(sv.power) || 0) * diversity(rack) * share;
+const legVa = (sv, share, rack) => legWatts(sv, share, rack) / serverPf(sv, rack);
+const legCurrent = (sv, share, rack) => legVa(sv, share, rack) / (state.settings.voltageLN || 230);
+
+/* Scenari: ai tre di base si aggiunge la perdita di ciascuna sorgente.
+   L'aliveness di ogni via si deduce da chi la alimenta: e questo il punto in cui
+   la topologia a monte entra nel calcolo senza duplicare nulla. */
+const BASE_SCENARIOS = ['normal', 'leftOnly', 'rightOnly'];
+const scenarioList = () => sourcesActive() ? BASE_SCENARIOS.concat(state.sources.map(s => 'src:' + s.id)) : BASE_SCENARIOS.slice();
+function scenarioLabel(s) {
+  if (s && s.indexOf('src:') === 0) {
+    const src = getSource(s.slice(4));
+    return t('scenarioFail') + ' ' + (src ? src.name : '?');
+  }
+  return { normal: t('scenarioNormal'), leftOnly: t('scenarioLeftOnly'), rightOnly: t('scenarioRightOnly'), none: t('scenarioNone') }[s] || s;
+}
+function aliveness(rack, scenario) {
+  if (scenario === 'normal') return { l: true, r: true };
+  if (scenario === 'leftOnly') return { l: true, r: false };
+  if (scenario === 'rightOnly') return { l: false, r: true };
+  if (scenario && scenario.indexOf('src:') === 0) {
+    if (!sourcesActive()) return { l: true, r: true };
+    const id = scenario.slice(4);
+    return { l: rack.pduLeft.sourceId !== id, r: rack.pduRight.sourceId !== id };
+  }
+  return { l: false, r: false };
+}
+/* Due scenari che lasciano vive le stesse vie sono indistinguibili per il rack:
+   servono per non gonfiare la tabella di righe identiche. */
+const alivenessKey = (rack, sc) => { const a = aliveness(rack, sc); return (a.l ? '1' : '0') + (a.r ? '1' : '0'); };
+function distinctScenarios(rack) {
+  const seen = {}, out = [];
+  scenarioList().forEach(sc => { const k = alivenessKey(rack, sc); if (!seen[k]) { seen[k] = 1; out.push(sc); } });
+  return out;
+}
+
+function blankSide(rack, side) {
+  const o = { phases: {}, breakers: {}, watts: 0, va: 0, maxPhase: 0, neutral: 0, alive: true };
+  getAvailablePhases(rack, side).forEach(p => { o.phases[p.id] = 0; });
+  getAvailableBreakers(rack, side).forEach(b => { o.breakers[b.id] = 0; });
+  return o;
+}
+
+function computeRack(rack, scenario) {
+  const al = aliveness(rack, scenario);
+  const leftAlive = al.l, rightAlive = al.r;
+  const res = { scenario, left: blankSide(rack, 'left'), right: blankSide(rack, 'right'), down: [], watts: 0, va: 0 };
+  res.left.alive = leftAlive; res.right.alive = rightAlive;
+
+  const addLeg = (side, sv, share) => {
+    const S = res[side];
+    const phaseId = getMappedPhase(rack, side, side === 'left' ? sv.leftPhase : sv.rightPhase);
+    const brId = side === 'left' ? sv.leftBreaker : sv.rightBreaker;
+    const A = legCurrent(sv, share, rack);
+    if (S.phases[phaseId] !== undefined) S.phases[phaseId] += A;
+    if (S.breakers[brId] !== undefined) S.breakers[brId] += A;
+    S.watts += legWatts(sv, share, rack); S.va += legVa(sv, share, rack);
+    res.watts += legWatts(sv, share, rack); res.va += legVa(sv, share, rack);
+  };
+
+  rack.servers.forEach(sv => {
+    if (sv.dualPower) {
+      if (leftAlive && rightAlive) { addLeg('left', sv, 0.5); addLeg('right', sv, 0.5); }
+      else if (leftAlive) addLeg('left', sv, 1);
+      else if (rightAlive) addLeg('right', sv, 1);
+      else res.down.push(sv.id);
+    } else {
+      const side = sv.pduSide === 'left' ? 'left' : 'right';
+      const alive = side === 'left' ? leftAlive : rightAlive;
+      if (alive) addLeg(side, sv, 1); else res.down.push(sv.id);
+    }
+  });
+
+  ['left', 'right'].forEach(side => {
+    const S = res[side];
+    const pdu = getPdu(rack, side);
+    const vals = Object.keys(S.phases).map(k => S.phases[k]);
+    S.maxPhase = vals.length ? Math.max.apply(null, vals) : 0;
+    if (pdu.type === '3F' && vals.length === 3) {
+      const [a, b, c] = vals;
+      const fund = Math.sqrt(Math.max(0, a * a + b * b + c * c - a * b - b * c - c * a));
+      const h3 = 3 * ((state.settings.h3Percent || 0) / 100) * ((a + b + c) / 3);
+      S.neutral = Math.sqrt(fund * fund + h3 * h3);
+    } else {
+      S.neutral = S.maxPhase;
+    }
+  });
+  return res;
+}
+
+const statusOf = pct => (pct > 100 ? 'alarm' : pct >= (state.settings.alarmPct || 80) ? 'alarm' : pct >= (state.settings.warnPct || 60) ? 'warn' : 'ok');
+const worseOf = (a, b) => { const rank = { ok: 0, warn: 1, alarm: 2 }; return rank[b] > rank[a] ? b : a; };
+
+/* Analisi permanente su tutti gli scenari: e il cuore della v3. */
+function analyzeRack(rack) {
+  const byScenario = {};
+  const list = scenarioList();
+  list.forEach(s => { byScenario[s] = computeRack(rack, s); });
+
+  const worst = { left: { phases: {}, breakers: {}, main: 0, neutral: 0 }, right: { phases: {}, breakers: {}, main: 0, neutral: 0 } };
+  ['left', 'right'].forEach(side => {
+    getAvailablePhases(rack, side).forEach(p => { worst[side].phases[p.id] = 0; });
+    getAvailableBreakers(rack, side).forEach(b => { worst[side].breakers[b.id] = 0; });
+  });
+  list.forEach(sc => {
+    ['left', 'right'].forEach(side => {
+      const S = byScenario[sc][side];
+      Object.keys(S.phases).forEach(k => { if (S.phases[k] > worst[side].phases[k]) worst[side].phases[k] = S.phases[k]; });
+      Object.keys(S.breakers).forEach(k => { if (S.breakers[k] > worst[side].breakers[k]) worst[side].breakers[k] = S.breakers[k]; });
+      if (S.maxPhase > worst[side].main) worst[side].main = S.maxPhase;
+      if (S.neutral > worst[side].neutral) worst[side].neutral = S.neutral;
+    });
+  });
+
+  let overall = 'ok';
+  ['left', 'right'].forEach(side => {
+    const pdu = getPdu(rack, side);
+    overall = worseOf(overall, statusOf((worst[side].main / pdu.mainBreaker) * 100));
+    Object.keys(worst[side].phases).forEach(k => { overall = worseOf(overall, statusOf((worst[side].phases[k] / pdu.mainBreaker) * 100)); });
+    getAvailableBreakers(rack, side).forEach(b => { overall = worseOf(overall, statusOf((worst[side].breakers[b.id] / b.maxCurrent) * 100)); });
+  });
+
+  const singleCorded = rack.servers.filter(s => !s.dualPower).length;
+  const lost = { leftOnly: byScenario.leftOnly.down.length, rightOnly: byScenario.rightOnly.down.length };
+  let worstLost = 0;
+  list.forEach(sc => { if (byScenario[sc].down.length > worstLost) worstLost = byScenario[sc].down.length; });
+  const sharedSource = sourcesActive() && !!(rack.pduLeft.sourceId && rack.pduLeft.sourceId === rack.pduRight.sourceId);
+  return { byScenario, worst, overall, singleCorded, lost, worstLost, sharedSource, outlets: outletUsage(rack) };
+}
+
+/* =========================================================================
+   5b. SORGENTI: capacita, carico per scenario, autonomia
+   ========================================================================= */
+function sourceCapacity(src) {
+  const active = src.redundant ? Math.max(1, (src.units || 1) - 1) : (src.units || 1);
+  const kVA = active * (src.kvaUnit || 0);
+  return { activeUnits: active, kVA: kVA, kW: kVA * (src.outPf || 1) };
+}
+/* Autonomia stimata a un carico diverso da quello dichiarato. Legge esponenziale
+   con esponente configurabile: e una stima, va confrontata con le curve del
+   costruttore prima di metterla in una relazione di progetto. */
+function sourceAutonomy(src, loadKw) {
+  const cap = sourceCapacity(src);
+  const refKw = cap.kW * ((src.refLoadPct || 100) / 100);
+  if (!(loadKw > 0) || !(refKw > 0) || !(src.autonomyMin > 0)) return null;
+  const k = state.settings.batteryExponent || 1.35;
+  return src.autonomyMin * Math.pow(refKw / loadKw, k);
+}
+/* Carico visto da ogni sorgente in un dato scenario: somma delle vie che
+   quella sorgente alimenta e che in quello scenario sono ancora attive. */
+function sourceLoads(scenario) {
+  const acc = {};
+  state.sources.forEach(s => { acc[s.id] = { kW: 0, kVA: 0, feeds: [] }; });
+  state.racks.forEach(rack => {
+    const r = computeRack(rack, scenario);
+    ['left', 'right'].forEach(side => {
+      const pdu = getPdu(rack, side);
+      if (!pdu.sourceId || !acc[pdu.sourceId]) return;
+      if (!r[side].alive) return;
+      acc[pdu.sourceId].kW += r[side].watts / 1000;
+      acc[pdu.sourceId].kVA += r[side].va / 1000;
+    });
+  });
+  return acc;
+}
+function analyzeSources() {
+  const out = {};
+  if (!sourcesActive()) return out;
+  const scenarios = scenarioList();
+  const perScenario = {};
+  scenarios.forEach(sc => { perScenario[sc] = sourceLoads(sc); });
+  state.sources.forEach(src => {
+    const cap = sourceCapacity(src);
+    const normal = perScenario.normal[src.id];
+    let worst = { kW: 0, kVA: 0, scenario: 'normal' };
+    scenarios.forEach(sc => {
+      const l = perScenario[sc][src.id];
+      if (l.kVA > worst.kVA) worst = { kW: l.kW, kVA: l.kVA, scenario: sc };
+    });
+    const pctW = cap.kW > 0 ? (worst.kW / cap.kW) * 100 : 0;
+    const pctVa = cap.kVA > 0 ? (worst.kVA / cap.kVA) * 100 : 0;
+    const feeds = [];
+    state.racks.forEach(rack => {
+      ['left', 'right'].forEach(side => {
+        if (getPdu(rack, side).sourceId === src.id) feeds.push({ rack: rack.rackTitle, pdu: getPdu(rack, side).name });
+      });
+    });
+    out[src.id] = {
+      capacity: cap, normal: normal, worst: worst, feeds: feeds,
+      pct: Math.max(pctW, pctVa), pctW: pctW, pctVa: pctVa,
+      status: statusOf(Math.max(pctW, pctVa)),
+      autonomyNormal: sourceAutonomy(src, normal.kW),
+      autonomyWorst: sourceAutonomy(src, worst.kW)
+    };
+  });
+  return out;
+}
+
+/* --- prese: il vincolo fisico che la corrente da sola non racconta --- */
+function outletUsage(rack) {
+  const use = { left: { c13: 0, c19: 0 }, right: { c13: 0, c19: 0 } };
+  rack.servers.forEach(sv => {
+    const k = sv.plug === 'C20' ? 'c19' : 'c13';
+    if (sv.dualPower) { use.left[k]++; use.right[k]++; }
+    else use[sv.pduSide === 'left' ? 'left' : 'right'][k]++;
+  });
+  ['left', 'right'].forEach(side => {
+    const pdu = getPdu(rack, side);
+    use[side].availC13 = pdu.c13 || 0;
+    use[side].availC19 = pdu.c19 || 0;
+    use[side].shortC13 = Math.max(0, use[side].c13 - use[side].availC13);
+    use[side].shortC19 = Math.max(0, use[side].c19 - use[side].availC19);
+  });
+  return use;
+}
+
+/* --- bilanciamento: valutato sul caso peggiore, cosi resta valido anche in guasto --- */
+function phaseBalance(rack, side) {
+  const pdu = getPdu(rack, side);
+  const phases = getAvailablePhases(rack, side);
+  if (phases.length < 2) return { factor: 100, imbalance: 0, loads: [] };
+  const worst = analyzeCache(rack).worst[side];
+  const loads = phases.map(p => (worst.phases[p.id] / pdu.mainBreaker) * 100);
+  const avg = loads.reduce((a, b) => a + b, 0) / loads.length;
+  const max = Math.max.apply(null, loads), min = Math.min.apply(null, loads);
+  const imbalance = max - min;
+  const sd = Math.sqrt(loads.reduce((a, l) => a + Math.pow(l - avg, 2), 0) / loads.length);
+  const factor = Math.max(0, Math.min(100, 100 - (imbalance > 0 ? imbalance * 0.8 + sd * 0.5 : 0)));
+  return { factor, imbalance, loads, avg, max, min };
+}
+const balanceClass = f => (f >= 85 ? 'ok' : f >= 70 ? 'warn' : 'alarm');
+const balanceText = f => (f >= 95 ? t('excellent') : f >= 85 ? t('good') : f >= 70 ? t('acceptable') : f >= 50 ? t('mediocre') : t('critical'));
+
+/* --- ambiente --- */
+function rackEnvironment(rack) {
+  let watts = 0, va = 0;
+  rack.servers.forEach(s => { watts += legWatts(s, 1, rack); va += legVa(s, 1, rack); });
+  const kW = watts / 1000;
+  const dT = state.settings.deltaT || 12;
+  /* Un UPS installato dentro il rack pesa e scalda in quel rack, non in sala. */
+  const localSources = sourcesActive() ? state.sources.filter(s => s.location === rack.id) : [];
+  return {
+    watts: watts, kW: kW, kVA: va / 1000,
+    btu: kW * 3412.14,
+    airflow: dT > 0 ? (2.98 * watts) / dT : 0,   // m3/h, aria a 1.2 kg/m3 e 1.006 kJ/kgK
+    weight: rackTare(rack) + rack.servers.reduce((a, s) => a + (Number(s.weight) || 0), 0),
+    usedU: rack.servers.reduce((a, s) => a + (Number(s.height) || 1), 0),
+    localSources: localSources
+  };
+}
+
+/* Cache per evitare di rifare 3 scenari a ogni riga renderizzata. */
+let _analysisCache = new Map();
+function analyzeCache(rack) {
+  if (!_analysisCache.has(rack.id)) _analysisCache.set(rack.id, analyzeRack(rack));
+  return _analysisCache.get(rack.id);
+}
+const invalidateAnalysis = () => { _analysisCache = new Map(); };
+
+function displayScenario(rack) {
+  const l = rack.pduLeft.on, r = rack.pduRight.on;
+  return l && r ? 'normal' : l ? 'leftOnly' : r ? 'rightOnly' : 'none';
+}
+
+/* =========================================================================
+   6. RENDERING
+   ========================================================================= */
+let view = { rack: null, scenario: 'normal', now: null, analysis: null };
+
+function loadBar(A, limit, worstA, light) {
+  const pct = limit > 0 ? (A / limit) * 100 : 0;
+  const wpct = limit > 0 ? ((worstA === undefined ? A : worstA) / limit) * 100 : 0;
+  const ghost = (worstA !== undefined && worstA > A + 0.05)
+    ? '<div class="progress-ghost ' + (wpct > 100 ? 'over' : '') + '" style="left:' + Math.min(100, wpct) + '%"></div>' : '';
+  return '<div class="progress-bar' + (light ? ' light' : '') + '"><div class="progress-fill ' + statusOf(pct) +
+    '" style="width:' + Math.min(100, pct) + '%"></div>' + ghost + '</div>';
+}
+function failoverLine(A, limit, worstA) {
+  if (worstA === undefined || worstA <= A + 0.05) return '';
+  const wpct = limit > 0 ? (worstA / limit) * 100 : 0;
+  return '<div class="failover-line"><span>' + esc(t('worstCaseLabel')) + '</span><span class="fo-' + statusOf(wpct) + '">' +
+    num(worstA) + ' A \u00b7 ' + num(wpct, 0) + '%</span></div>';
+}
+
+/* --- sorgenti a monte --- */
+function renderSources() {
+  const host = document.getElementById('sourcesHost');
+
+  /* Modello a monte disattivato: una riga sola, nessun calcolo, nessun avviso. */
+  if (!sourcesActive()) {
+    host.innerHTML = '<div class="panel sources-off no-print"><div class="sources-bar">' +
+      '<div><span class="source-name">' + esc(t('sourcesTitle')) + '</span>' +
+      '<div class="source-kind" style="text-transform:none;letter-spacing:0">' + esc(t('sourcesOff')) + '</div></div>' +
+      '<button class="btn-mini" onclick="setUseSources(true)">' + esc(t('sourcesActivate')) + '</button></div>' +
+      '<div class="hint" style="margin-top:8px">' + esc(t('sourcesOffHint')) + '</div></div>';
+    return;
+  }
+
+  const an = analyzeSources();
+  const collapsed = !!state.settings.sourcesCollapsed;
+  let h = '<div class="panel"><div class="panel-title">' + esc(t('sourcesTitle')) +
+    '<span class="sub">' + state.sources.length + ' ' + esc(t('sourcesOn')) + '</span>' +
+    '<span class="no-print" style="margin-left:auto;display:flex;gap:6px">' +
+    '<button class="btn-mini" onclick="toggleSourcesCollapsed()">' + esc(collapsed ? t('sourcesExpand') : t('sourcesCollapse')) + '</button>' +
+    '<button class="btn-mini" onclick="setUseSources(false)">' + esc(t('sourcesDeactivate')) + '</button>' +
+    '<button class="btn-mini" onclick="openSourceModal()">' + esc(t('addSource')) + '</button></span></div>';
+  if (collapsed) {
+    const worst = state.sources.reduce((acc, s) => Math.max(acc, an[s.id] ? an[s.id].pct : 0), 0);
+    h += '<div class="source-row"><span>' + esc(t('loadWorst')) + '</span><span class="cell-' + statusOf(worst) + '">' + num(worst, 0) + '%</span></div></div>';
+    host.innerHTML = h;
+    return;
+  }
+  if (!state.sources.length) {
+    h += '<div class="empty-state">' + esc(t('noFeeds')) + '</div></div>';
+    host.innerHTML = h;
+    return;
+  }
+  h += '<div class="source-grid">';
+  state.sources.forEach(src => {
+    const a = an[src.id], cap = a.capacity;
+    const cfg = (src.units || 1) > 1
+      ? (src.units + '\u00d7' + num(src.kvaUnit, 0) + ' kVA' + (src.redundant ? ' N+1 \u2192 ' + cap.activeUnits + ' ' + esc(t('activeUnits')) : ''))
+      : num(src.kvaUnit, 0) + ' kVA';
+    const loc = src.location === 'room' ? t('room') : (t('inRack') + ' ' + ((state.racks.find(r => r.id === src.location) || {}).rackTitle || '?'));
+    h += '<div class="source-card ' + a.status + '">' +
+      '<div class="source-head"><div><div class="source-name">' + esc(src.name) + '</div>' +
+      '<div class="source-kind">' + esc(t('kind' + (src.kind === 'ups' ? 'Ups' : src.kind === 'gen' ? 'Gen' : 'Grid'))) + ' \u00b7 ' + esc(loc) + '</div></div>' +
+      '<button class="btn-mini no-print" onclick="openSourceModal(\'' + src.id + '\')">\u270e</button></div>' +
+      '<div class="source-row"><span>' + esc(t('capacity')) + '</span><span>' + esc(cfg) + ' \u2192 ' + num(cap.kW, 1) + ' kW</span></div>' +
+      '<div class="source-row"><span>' + esc(t('loadNormal')) + '</span><span>' + num(a.normal.kW, 2) + ' kW \u00b7 ' + num(a.normal.kVA, 2) + ' kVA</span></div>' +
+      '<div class="source-row"><span>' + esc(t('loadWorst')) + '</span><span class="cell-' + a.status + '">' + num(a.worst.kW, 2) + ' kW \u00b7 ' + num(a.worst.kVA, 2) + ' kVA (' + num(a.pct, 0) + '%)</span></div>' +
+      (a.worst.scenario !== 'normal' ? '<div class="source-row"><span></span><span style="font-size:.7rem;color:var(--muted)">' + esc(scenarioLabel(a.worst.scenario)) + '</span></div>' : '') +
+      loadBar(a.worst.kVA, cap.kVA || 1, undefined, true) +
+      (a.autonomyWorst !== null
+        ? '<div class="source-row"><span>' + esc(t('autonomy')) + ' (' + esc(t('estimate')) + ')</span><span>' +
+          (a.autonomyWorst > 240 ? '&gt; 240' : num(a.autonomyWorst, 0)) + ' ' + esc(t('minutes')) + '</span></div>'
+        : '') +
+      '<div class="source-feeds">' + esc(t('feeds')) + ': ' +
+      (a.feeds.length ? a.feeds.map(f => esc(f.rack) + ' / ' + esc(f.pdu)).join(' \u00b7 ') : esc(t('noFeeds'))) + '</div>' +
+      (a.status === 'alarm' ? '<div class="source-row cell-alarm"><span>\u26a0</span><span>' + esc(t('sourceOverload')) + '</span></div>' : '') +
+      '</div>';
+  });
+  h += '</div></div>';
+  host.innerHTML = h;
+}
+
+/* --- tab dei rack --- */
+function renderRackTabs() {
+  let h = '<div class="rack-tabs no-print">';
+  state.racks.forEach(r => {
+    const a = analyzeCache(r);
+    const dot = a.overall === 'ok' ? '' : '<span class="tab-flag">' + (a.overall === 'alarm' ? '\u25cf' : '\u25b2') + '</span>';
+    h += '<button class="rack-tab' + (r.id === state.currentRackId ? ' active' : '') + '" onclick="switchRack(\'' + r.id + '\')">' +
+      esc(r.rackTitle) + dot +
+      (state.racks.length > 1 ? '<span class="btn-remove-rack" onclick="removeRack(\'' + r.id + '\',event)" title="' + attr(t('deleteServer')) + '">\u00d7</span>' : '') +
+      '</button>';
+  });
+  h += '<button class="btn-add-rack" onclick="addNewRack()">' + esc(t('addRack')) + '</button></div>';
+  document.getElementById('rackTabsHost').innerHTML = h;
+}
+
+/* --- riepilogo globale --- */
+function renderGlobalSummary() {
+  let servers = 0, watts = 0, usedU = 0, totU = 0, weight = 0, lost = 0, overall = 'ok';
+  state.racks.forEach(r => {
+    const env = rackEnvironment(r), a = analyzeCache(r);
+    servers += r.servers.length; watts += env.watts; usedU += env.usedU; totU += r.rackSize;
+    weight += env.weight; lost += Math.max(a.lost.leftOnly, a.lost.rightOnly);
+    overall = worseOf(overall, a.overall);
+  });
+  const kW = watts / 1000;
+  const verdictClass = overall === 'ok' && lost === 0 ? 'ok' : overall === 'alarm' ? 'alarm' : 'warn';
+  const h = '<div class="panel"><div class="panel-title">' + esc(t('globalSummary')) +
+    '<span class="sub">' + state.racks.length + ' rack \u00b7 ' + esc(t('scenarioNormal')) + '</span></div>' +
+    '<div class="summary-grid">' +
+    card(t('apparatus'), servers, esc(t('filterSingle')) + ': ' + state.racks.reduce((a, r) => a + r.servers.filter(s => !s.dualPower).length, 0)) +
+    card(t('totalPower'), num(kW, 2) + ' kW', num(kW / (state.settings.powerFactor || 1), 2) + ' kVA') +
+    card(t('occupancy'), usedU + '/' + totU + ' U', (totU - usedU) + ' ' + esc(t('freeU'))) +
+    card(t('weightTotal'), num(weight, 0) + ' kg', '') +
+    card(t('redundancy'), overall === 'ok' ? 'OK' : overall === 'warn' ? '\u26a0' : '\u2716',
+      lost ? lost + ' ' + esc(t('lostApparatus')).toLowerCase() : esc(t('verdictOk')).split(':')[0], verdictClass) +
+    '</div></div>';
+  document.getElementById('globalSummaryHost').innerHTML = h;
+}
+function card(title, value, detail, cls) {
+  return '<div class="summary-card' + (cls ? ' ' + cls : '') + '"><div class="summary-card-title">' + esc(title) +
+    '</div><div class="summary-card-value">' + esc(String(value)) + '</div>' +
+    (detail ? '<div class="summary-card-detail">' + detail + '</div>' : '') + '</div>';
+}
+
+/* --- PDU --- */
+function renderPDU(side) {
+  const rack = view.rack, pdu = getPdu(rack, side), now = view.now[side], worst = view.analysis.worst[side];
+  const out = view.analysis.outlets[side];
+  const phases = getAvailablePhases(rack, side);
+  const breakers = getAvailableBreakers(rack, side);
+
+  let h = '<div class="pdu-display"><div class="pdu-name no-print"><input type="text" value="' + attr(pdu.name) +
+    '" maxlength="24" onchange="updatePduName(\'' + side + '\', this.value)"></div>';
+
+  h += '<div class="breaker-box ' + (pdu.on ? 'on' : 'off') + '">';
+  const src = sourcesActive() ? getSource(pdu.sourceId) : null;
+  h += '<div class="breaker-header"><span class="breaker-title">' + esc(pdu.name) + ' \u00b7 ' +
+    (pdu.type === '3F' ? '3F' : '1F') + ' ' + pdu.mainBreaker + 'A' +
+    (src ? '<br><span style="font-weight:400;opacity:.8;font-size:.72rem">\u2191 ' + esc(src.name) + '</span>' : '') + '</span><span class="breaker-controls no-print">' +
+    '<button class="btn-power ' + (pdu.on ? 'on' : 'off') + '" onclick="togglePdu(\'' + side + '\')" title="on/off">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg></button>' +
+    '<button class="btn-settings" onclick="togglePduSettings(\'' + side + '\')" title="setup"><span class="gear-glyph">\u2699\ufe0e</span></button></span></div>';
+
+  if (pdu.showSettings) {
+    h += '<div class="settings-panel no-print">';
+    h += '<div class="settings-input"><span>' + esc(t('pduModel')) + '</span><select class="wide" onchange="updatePduProfile(\'' + side + '\', this.value)">' +
+      PDU_LIBRARY.map(p => '<option value="' + p.id + '"' + (pdu.model === p.id ? ' selected' : '') + '>' + esc(pduProfileLabel(p)) + '</option>').join('') +
+      '</select></div>';
+    h += '<div class="settings-input"><span>' + esc(t('pduType')) + '</span><select onchange="updatePduField(\'' + side + '\',\'type\',this.value)">' +
+      '<option value="3F"' + (pdu.type === '3F' ? ' selected' : '') + '>' + esc(t('threePhase')) + '</option>' +
+      '<option value="1F"' + (pdu.type === '1F' ? ' selected' : '') + '>' + esc(t('singlePhase')) + '</option></select></div>';
+    if (pdu.type === '1F') {
+      h += '<div class="settings-input"><span>' + esc(t('phaseOfPdu')) + '</span><select onchange="updatePduField(\'' + side + '\',\'singlePhase\',this.value)">' +
+        PDU_CONFIG[side].phases.map(p => '<option value="' + p.id + '"' + (pdu.singlePhase === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') +
+        '</select></div>';
+    }
+    h += '<div class="settings-input"><span>' + esc(t('mainBreaker')) + '</span><select onchange="updatePduField(\'' + side + '\',\'mainBreaker\',this.value)">' +
+      [16, 20, 25, 32, 40, 50, 63].map(a => '<option value="' + a + '"' + (pdu.mainBreaker === a ? ' selected' : '') + '>' + a + ' A</option>').join('') + '</select></div>';
+    h += '<div class="settings-input"><span>' + esc(t('breakersPerPhase')) + '</span><input type="number" min="1" max="8" value="' + (pdu.breakersPerPhase || 2) +
+      '" onchange="updatePduField(\'' + side + '\',\'breakersPerPhase\',this.value)"></div>';
+    h += '<div class="settings-input"><span>' + esc(t('breakerCurrent')) + '</span><select onchange="updatePduField(\'' + side + '\',\'breakerCurrent\',this.value)">' +
+      [6, 10, 13, 16, 20, 25, 32].map(a => '<option value="' + a + '"' + (pdu.breakerCurrent === a ? ' selected' : '') + '>' + a + ' A</option>').join('') + '</select></div>';
+    h += '<div class="settings-input"><span>' + esc(t('outletsC13')) + '</span><input type="number" min="0" max="96" value="' + (pdu.c13 || 0) +
+      '" onchange="updatePduField(\'' + side + '\',\'c13\',this.value)"></div>';
+    h += '<div class="settings-input"><span>' + esc(t('outletsC19')) + '</span><input type="number" min="0" max="48" value="' + (pdu.c19 || 0) +
+      '" onchange="updatePduField(\'' + side + '\',\'c19\',this.value)"></div>';
+    if (sourcesActive()) h += '<div class="settings-input"><span>' + esc(t('poweredBy')) + '</span><select class="wide" onchange="updatePduField(\'' + side + '\',\'sourceId\',this.value)">' +
+      '<option value="">\u2014</option>' +
+      state.sources.map(s => '<option value="' + attr(s.id) + '"' + (pdu.sourceId === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') +
+      '</select></div>';
+    h += '</div>';
+  }
+
+  /* generale */
+  h += '<div class="load-info"><span>' + esc(t('mainLoad')) + '</span><span class="load-value">' + num(now.maxPhase) + ' / ' + pdu.mainBreaker + ' A</span></div>';
+  h += loadBar(now.maxPhase, pdu.mainBreaker, worst.main);
+  h += failoverLine(now.maxPhase, pdu.mainBreaker, worst.main);
+  h += '<div class="failover-line"><span>' + esc(t('neutral')) + '</span><span>' + num(now.neutral) + ' A</span></div>';
+  h += '</div>';
+
+  /* fasi */
+  phases.forEach(p => {
+    const A = now.phases[p.id] || 0, W = worst.phases[p.id] || 0;
+    h += '<div class="phase-box' + (pdu.on ? '' : ' disabled') + '">' +
+      '<div class="load-info"><span><span class="chip-phase" style="background:' + PHASE_COLORS[p.color] + '"></span>' + esc(p.name) + '</span>' +
+      '<span class="load-value">' + num(A) + ' / ' + pdu.mainBreaker + ' A</span></div>' +
+      loadBar(A, pdu.mainBreaker, W, true) + failoverLine(A, pdu.mainBreaker, W) + '</div>';
+  });
+
+  /* interruttori */
+  h += '<div class="breakers-section"><div class="breakers-title">' + esc(t('breakers')) + '</div>';
+  breakers.forEach(b => {
+    const A = now.breakers[b.id] || 0, W = worst.breakers[b.id] || 0;
+    const ph = PDU_CONFIG[side].phases.find(p => p.id === b.phase);
+    h += '<div class="breaker-item"><div class="load-info"><span>' +
+      (ph ? '<span class="chip-phase" style="background:' + PHASE_COLORS[ph.color] + '"></span>' : '') + esc(b.name) +
+      '</span><span class="load-value">' + num(A) + ' / ' + b.maxCurrent + ' A</span></div>' +
+      loadBar(A, b.maxCurrent, W, true) + failoverLine(A, b.maxCurrent, W) + '</div>';
+  });
+  h += '</div>';
+
+  /* prese */
+  h += '<div class="breakers-section"><div class="breakers-title">' + esc(t('outlets')) + '</div>' +
+    '<div class="outlet-row' + (out.shortC13 ? ' bad' : '') + '"><span>C13</span><span>' + out.c13 + ' ' + esc(t('ofLabel')) + ' ' + out.availC13 +
+    (out.shortC13 ? ' \u2013 ' + out.shortC13 + ' ' + esc(t('outletShortage')) : '') + '</span></div>' +
+    '<div class="outlet-row' + (out.shortC19 ? ' bad' : '') + '"><span>C19</span><span>' + out.c19 + ' ' + esc(t('ofLabel')) + ' ' + out.availC19 +
+    (out.shortC19 ? ' \u2013 ' + out.shortC19 + ' ' + esc(t('outletShortage')) : '') + '</span></div></div>';
+
+  /* bilanciamento */
+  if (phases.length > 1) {
+    const bal = phaseBalance(rack, side);
+    h += '<div class="balance-box"><div class="summary-card-title">' + esc(t('balance')) + '</div>' +
+      '<div class="balance-value balance-' + balanceClass(bal.factor) + '">' + num(bal.factor, 0) + '%</div>' +
+      '<div class="summary-card-detail">' + esc(balanceText(bal.factor)) + ' \u00b7 \u0394 ' + num(bal.imbalance, 0) + '%</div>' +
+      '<button class="btn-optimize no-print" onclick="openOptimizationModal(\'' + side + '\')">' + esc(t('optimize')) + '</button>' +
+      '<button class="btn-optimize no-print" style="background:var(--ink)" onclick="openOptimizationModal(\'both\')">' + esc(t('optimizeBoth')) + '</button></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* --- rack --- */
+function renderRack() {
+  const rack = view.rack, now = view.now, a = view.analysis;
+  const down = new Set(now.down);
+  let h = '<div class="rack-container"><div class="rack-header">' +
+    '<input type="text" class="rack-title-input" value="' + attr(rack.rackTitle) + '" maxlength="30" onchange="updateRackTitle(this.value)">' +
+    '<button class="btn-mini no-print" onclick="openRackParamsModal()" title="' + attr(t('rackParams')) + '">\u2699</button>' +
+    '<button class="btn-add no-print" onclick="openAddServerDialog()">+ ' + esc(t('addNewServer')) + '</button></div>';
+  h += '<div class="rack-units">';
+
+  const topOf = {};
+  rack.servers.forEach(s => { topOf[s.position + (Number(s.height) || 1) - 1] = s; });
+  const covered = new Set();
+  rack.servers.forEach(s => { for (let i = 0; i < (Number(s.height) || 1); i++) covered.add(s.position + i); });
+
+  for (let u = rack.rackSize; u >= 1; u--) {
+    const sv = topOf[u];
+    if (sv) {
+      const hgt = (Number(sv.height) || 1) * 24;
+      let cls = 'server-box';
+      if (down.has(sv.id)) cls += ' no-power';
+      else if (sv.dualPower && view.scenario !== 'normal') cls += ' partial-power';
+      else if (!sv.dualPower) cls += ' at-risk';
+      if (rack.selectedServerId === sv.id) cls += ' selected';
+      if (searchFilter.term && !searchFilter.matched.has(sv.id)) cls += ' dim';
+      const icons = sv.dualPower ? '\u26a1\u26a1' : '\u26a1';
+      h += '<div class="' + cls + '" style="height:' + hgt + 'px" draggable="true"' +
+        ' ondragstart="handleDragStart(event,\'' + sv.id + '\')" ondragend="handleDragEnd(event)"' +
+        ' ondragover="handleDragOver(event,' + sv.position + ')" ondrop="handleDrop(event,' + sv.position + ')"' +
+        ' onclick="selectServer(\'' + sv.id + '\')" title="' + attr(sv.name) + '">' +
+        '<div class="server-info"><div class="server-name">' + esc(sv.name) + ' <span>' + icons + '</span></div>' +
+        '<div class="server-details">' + (Number(sv.power) || 0) + ' W \u00b7 ' + sv.height + 'U</div></div></div>';
+    } else if (!covered.has(u)) {
+      h += '<div class="rack-unit" data-position="' + u + '" ondragover="handleDragOver(event,' + u + ')"' +
+        ' ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,' + u + ')"' +
+        ' onclick="openAddServerDialog(' + u + ')"><span class="rack-unit-label">' + u + '</span></div>';
+    }
+  }
+  h += '</div>';
+  const env = rackEnvironment(rack);
+  h += '<div class="failover-line" style="margin-top:10px;color:var(--muted)"><span>' + num(env.kW, 2) + ' kW \u00b7 ' + num(env.kVA, 2) + ' kVA</span>' +
+    '<span>cos\u03c6 ' + num(rackPf(rack), 2) + (rack.powerFactor > 0 ? '' : ' \u00b7 ' + esc(t('projectValue'))) + '</span>' +
+    '<span>' + env.usedU + '/' + rack.rackSize + ' U</span></div>';
+  h += '</div>';
+  return h;
+}
+
+/* --- pannello configurazione apparato --- */
+function renderConfigPanel() {
+  const rack = view.rack, sv = getSelectedServer(rack);
+  if (!sv) {
+    return '<div class="config-panel"><div class="config-header"><span class="config-title">' + esc(t('serverConfig')) + '</span></div>' +
+      '<div class="empty-state">' + esc(t('selectServerToConfig')) + '</div></div>';
+  }
+  const lp = getAvailablePhases(rack, 'left'), rp = getAvailablePhases(rack, 'right');
+  const lb = breakersOfPhase(rack, 'left', sv.leftPhase), rb = breakersOfPhase(rack, 'right', sv.rightPhase);
+  const opt = (arr, val, labelFn) => arr.map(o => '<option value="' + attr(o.id) + '"' + (val === o.id ? ' selected' : '') + '>' + esc(labelFn(o)) + '</option>').join('');
+
+  let h = '<div class="config-panel"><div class="config-header"><span class="config-title">' + esc(sv.name) +
+    '</span><button class="btn-close no-print" onclick="closeConfigPanel()">\u00d7</button></div>';
+  h += '<div class="field"><label>' + esc(t('name')) + '</label><input type="text" maxlength="30" value="' + attr(sv.name) + '" onchange="updateServer(\'name\',this.value)"></div>';
+  h += '<div class="field-row"><div class="field"><label>' + esc(t('position')) + '</label><input type="number" min="1" max="' + rack.rackSize + '" value="' + sv.position + '" onchange="updateServer(\'position\',this.value)"></div>' +
+    '<div class="field"><label>' + esc(t('height')) + '</label><input type="number" min="1" max="12" value="' + sv.height + '" onchange="updateServer(\'height\',this.value)"></div></div>';
+  h += '<div class="field-row"><div class="field"><label>' + esc(t('power')) + '</label><input type="number" min="0" step="10" value="' + (sv.power || 0) + '" onchange="updateServer(\'power\',this.value)"></div>' +
+    '<div class="field"><label>' + esc(t('nameplate')) + '</label><input type="number" min="0" step="10" value="' + (sv.nameplate || 0) + '" onchange="updateServer(\'nameplate\',this.value)"></div></div>';
+  h += '<div class="field-row"><div class="field"><label>' + esc(t('weight')) + '</label><input type="number" min="0" step="0.5" value="' + (sv.weight || 0) + '" onchange="updateServer(\'weight\',this.value)"></div>' +
+    '<div class="field"><label>' + esc(t('powerFactorField')) + '</label><input type="number" min="0.5" max="1" step="0.01" value="' + (sv.pf || '') + '" onchange="updateServer(\'pf\',this.value)"></div></div>';
+  h += '<div class="field"><label>' + esc(t('plug')) + '</label><select onchange="updateServer(\'plug\',this.value)">' +
+    '<option value="C14"' + (sv.plug !== 'C20' ? ' selected' : '') + '>C14 \u2192 C13</option>' +
+    '<option value="C20"' + (sv.plug === 'C20' ? ' selected' : '') + '>C20 \u2192 C19</option></select></div>';
+  h += '<div class="checkbox-row"><input type="checkbox" id="cfgDual"' + (sv.dualPower ? ' checked' : '') + ' onchange="updateServer(\'dualPower\',this.checked)"><label for="cfgDual" style="margin:0;text-transform:none;font-size:.82rem;color:var(--ink)">' + esc(t('dualPower')) + '</label></div>';
+
+  if (sv.dualPower) {
+    h += '<div class="field"><label>' + esc(t('leftPhase')) + '</label><select onchange="updateServer(\'leftPhase\',this.value)">' + opt(lp, sv.leftPhase, o => o.name) + '</select></div>';
+    h += '<div class="field"><label>' + esc(t('leftBreaker')) + '</label><select onchange="updateServer(\'leftBreaker\',this.value)">' + opt(lb, sv.leftBreaker, o => o.name + ' (' + o.maxCurrent + 'A)') + '</select></div>';
+    h += '<div class="field"><label>' + esc(t('rightPhase')) + '</label><select onchange="updateServer(\'rightPhase\',this.value)">' + opt(rp, sv.rightPhase, o => o.name) + '</select></div>';
+    h += '<div class="field"><label>' + esc(t('rightBreaker')) + '</label><select onchange="updateServer(\'rightBreaker\',this.value)">' + opt(rb, sv.rightBreaker, o => o.name + ' (' + o.maxCurrent + 'A)') + '</select></div>';
+  } else {
+    const side = sv.pduSide === 'left' ? 'left' : 'right';
+    const ph = side === 'left' ? lp : rp, br = side === 'left' ? lb : rb;
+    h += '<div class="field"><label>' + esc(t('pduSide')) + '</label><select onchange="updateServer(\'pduSide\',this.value)">' +
+      '<option value="left"' + (side === 'left' ? ' selected' : '') + '>' + esc(rack.pduLeft.name) + '</option>' +
+      '<option value="right"' + (side === 'right' ? ' selected' : '') + '>' + esc(rack.pduRight.name) + '</option></select></div>';
+    h += '<div class="field"><label>' + esc(t('phaseField')) + '</label><select onchange="updateServer(\'' + (side === 'left' ? 'leftPhase' : 'rightPhase') + '\',this.value)">' +
+      opt(ph, side === 'left' ? sv.leftPhase : sv.rightPhase, o => o.name) + '</select></div>';
+    h += '<div class="field"><label>' + esc(t('breakerField')) + '</label><select onchange="updateServer(\'' + (side === 'left' ? 'leftBreaker' : 'rightBreaker') + '\',this.value)">' +
+      opt(br, side === 'left' ? sv.leftBreaker : sv.rightBreaker, o => o.name + ' (' + o.maxCurrent + 'A)') + '</select></div>';
+    h += '<div class="hint">' + esc(t('riskLabel')) + '</div>';
+  }
+  h += '<button class="btn-danger no-print" onclick="deleteServer()">' + esc(t('deleteServer')) + '</button></div>';
+  return h;
+}
+
+/* --- verifica ridondanza --- */
+function renderRedundancy() {
+  const rack = view.rack, a = view.analysis;
+  const lost = a.worstLost;
+  let vClass = a.overall, vText = a.overall === 'ok' ? t('verdictOk') : a.overall === 'warn' ? t('verdictWarn') : t('verdictAlarm');
+  if (lost > 0 && vClass === 'ok') { vClass = 'warn'; }
+  const icon = vClass === 'ok' ? '\u2714' : vClass === 'warn' ? '\u26a0' : '\u2716';
+
+  let h = '<div class="panel"><div class="panel-title">' + esc(t('redundancyCheck')) +
+    '<span class="sub">' + esc(rack.rackTitle) + '</span></div>';
+  h += '<div class="verdict ' + vClass + '"><span class="verdict-icon">' + icon + '</span><span>' + esc(vText) +
+    (lost ? ' \u2014 ' + lost + ' ' + esc(t('verdictLost')) : '') + '</span></div>';
+  if (a.sharedSource) {
+    h += '<div class="verdict warn"><span class="verdict-icon">\u26a0</span><span>' + esc(t('sharedSource')) + '</span></div>';
+  }
+  h += '<table class="grid"><thead><tr><th>' + esc(t('scenario')) + '</th><th>' + esc(t('side')) + '</th><th>' + esc(t('apparentPower')) +
+    '</th><th>' + esc(t('worstPhase')) + '</th><th>' + esc(t('worstBreaker')) + '</th><th>' + esc(t('neutral')) +
+    '</th><th>' + esc(t('lostApparatus')) + '</th><th>' + esc(t('status')) + '</th></tr></thead><tbody>';
+
+  distinctScenarios(rack).forEach(sc => {
+    const r = a.byScenario[sc];
+    ['left', 'right'].forEach((side, idx) => {
+      const pdu = getPdu(rack, side), S = r[side];
+      const brs = getAvailableBreakers(rack, side);
+      let wb = { name: null, A: 0, max: 1 };
+      brs.forEach(b => { const A = S.breakers[b.id] || 0; if (A > wb.A) wb = { name: b.name, A: A, max: b.maxCurrent }; });
+      const mainPct = (S.maxPhase / pdu.mainBreaker) * 100;
+      const brPct = (wb.A / wb.max) * 100;
+      /* Con carico nullo nessuna fase e "la piu carica": si lascia vuoto
+         invece di indicare l'ultima esaminata. */
+      let topPhase = { name: null, A: 0 };
+      getAvailablePhases(rack, side).forEach(p => {
+        const A = S.phases[p.id] || 0;
+        if (A > topPhase.A) topPhase = { name: p.name, A: A };
+      });
+      const phaseCell = topPhase.name === null
+        ? '<td class="n">\u2013</td>'
+        : '<td class="n cell-' + statusOf(mainPct) + '">' + esc(topPhase.name) + ' \u00b7 ' + num(topPhase.A) + ' A (' + num(mainPct, 0) + '%)</td>';
+      const breakerCell = wb.name === null
+        ? '<td class="n">\u2013</td>'
+        : '<td class="n cell-' + statusOf(brPct) + '">' + esc(wb.name) + ' \u00b7 ' + num(wb.A) + ' A (' + num(brPct, 0) + '%)</td>';
+      const kVA = S.va / 1000;
+      h += '<tr>' + (idx === 0 ? '<td rowspan="2"><strong>' + esc(scenarioLabel(sc)) + '</strong></td>' : '') +
+        '<td>' + esc(pdu.name) + '</td>' +
+        (S.alive
+          ? '<td class="n">' + num(kVA, 2) + ' kVA</td>' +
+            phaseCell + breakerCell +
+            '<td class="n">' + num(S.neutral) + ' A</td>'
+          : '<td class="n">\u2013</td><td class="n">\u2013</td><td class="n">\u2013</td><td class="n">\u2013</td>') +
+        (idx === 0 ? '<td rowspan="2" class="n">' + r.down.length + '</td>' +
+          '<td rowspan="2"><span class="badge ' + scenarioStatus(rack, r) + '">' + statusLabel(scenarioStatus(rack, r)) + '</span></td>' : '') +
+        '</tr>';
+    });
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+function scenarioStatus(rack, r) {
+  let st = 'ok';
+  ['left', 'right'].forEach(side => {
+    if (!r[side].alive) return;
+    const pdu = getPdu(rack, side);
+    st = worseOf(st, statusOf((r[side].maxPhase / pdu.mainBreaker) * 100));
+    getAvailableBreakers(rack, side).forEach(b => { st = worseOf(st, statusOf(((r[side].breakers[b.id] || 0) / b.maxCurrent) * 100)); });
+  });
+  if (r.down.length && st === 'ok') st = 'warn';
+  return st;
+}
+const statusLabel = st => (st === 'ok' ? 'OK' : st === 'warn' ? '\u26a0' : '\u2716');
+
+/* --- ambiente --- */
+function renderEnvironment() {
+  const env = rackEnvironment(view.rack);
+  return '<div class="panel-title">' + esc(t('environment')) + '<span class="sub">' + esc(view.rack.rackTitle) + '</span></div>' +
+    '<div class="summary-grid">' +
+    card(t('totalPower'), num(env.kW, 2) + ' kW', '') +
+    card(t('apparentPower'), num(env.kVA, 2) + ' kVA', 'cos\u03c6 ' + state.settings.powerFactor) +
+    card(t('thermal'), num(env.btu, 0) + ' BTU/h', '') +
+    card(t('airflow'), num(env.airflow, 0) + ' m\u00b3/h', '\u0394T ' + state.settings.deltaT + ' K') +
+    card(t('weightTotal'), num(env.weight, 0) + ' kg', '') +
+    '</div>';
+}
+
+/* --- elenco apparati --- */
+function renderServerList() {
+  const rack = view.rack;
+  const list = rack.servers.slice().sort((a, b) => b.position - a.position).filter(s => matchesFilter(s));
+  if (!list.length) { document.getElementById('serverListContent').innerHTML = '<div class="empty-state">' + esc(t('noServers')) + '</div>'; return; }
+  let h = '<table class="server-table"><thead><tr><th>' + esc(t('serverCol')) + '</th><th>' + esc(t('positionCol')) +
+    '</th><th>' + esc(t('powerCol')) + '</th><th>' + esc(t('typeCol')) + '</th><th>' + esc(t('plug')) +
+    '</th><th>' + esc(t('connectionsCol')) + '</th><th>' + esc(t('weight')) + '</th></tr></thead><tbody>';
+  list.forEach(sv => {
+    h += '<tr onclick="selectServer(\'' + sv.id + '\')" style="cursor:pointer"><td><strong>' + esc(sv.name) + '</strong></td>' +
+      '<td class="n">U' + sv.position + (sv.height > 1 ? '\u2013' + (sv.position + sv.height - 1) : '') + '</td>' +
+      '<td class="n">' + (sv.power || 0) + ' W</td>' +
+      '<td>' + (sv.dualPower ? esc(t('dual')) : esc(t('single'))) + '</td>' +
+      '<td>' + esc(sv.plug || 'C14') + '</td>' +
+      '<td>' + connectionText(rack, sv) + '</td>' +
+      '<td class="n">' + (sv.weight ? num(sv.weight, 1) + ' kg' : '\u2013') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  document.getElementById('serverListContent').innerHTML = h;
+}
+function connectionText(rack, sv) {
+  const desc = side => {
+    const pdu = getPdu(rack, side);
+    const ph = PDU_CONFIG[side].phases.find(p => p.id === getMappedPhase(rack, side, side === 'left' ? sv.leftPhase : sv.rightPhase));
+    const br = getAvailableBreakers(rack, side).find(b => b.id === (side === 'left' ? sv.leftBreaker : sv.rightBreaker));
+    return esc(pdu.name) + ' / ' + esc(ph ? ph.name : '?') + ' / ' + esc(br ? br.name : '?');
+  };
+  return sv.dualPower ? desc('left') + '<br>' + desc('right') : desc(sv.pduSide === 'left' ? 'left' : 'right');
+}
+
+/* --- ricerca --- */
+function matchesFilter(sv) {
+  if (searchFilter.term && !searchFilter.matched.has(sv.id)) return false;
+  if (searchFilter.filter === 'dual') return !!sv.dualPower;
+  if (searchFilter.filter === 'single') return !sv.dualPower;
+  if (searchFilter.filter === 'risk') return !sv.dualPower;
+  return true;
+}
+function handleSearch(term) {
+  searchFilter.term = (term || '').trim().toLowerCase();
+  computeMatches(); renderServerList(); document.getElementById('rack-col').innerHTML = renderRack(); updateFilterResults();
+}
+function setFilter(f) {
+  searchFilter.filter = f;
+  ['all', 'dual', 'single', 'risk'].forEach(k => document.getElementById('chip-' + k).classList.toggle('active', k === f));
+  renderServerList(); updateFilterResults();
+}
+function computeMatches() {
+  const rack = getCurrentRack();
+  searchFilter.matched = new Set();
+  if (!searchFilter.term) { rack.servers.forEach(s => searchFilter.matched.add(s.id)); return; }
+  rack.servers.forEach(s => { if (String(s.name).toLowerCase().indexOf(searchFilter.term) !== -1) searchFilter.matched.add(s.id); });
+}
+function updateFilterResults() {
+  const rack = getCurrentRack();
+  const n = rack.servers.filter(matchesFilter).length;
+  document.getElementById('filterResults').textContent = n + ' / ' + rack.servers.length + ' ' + t('results');
+}
+
+/* --- render principale --- */
+function render() {
+  invalidateAnalysis();
+  const rack = getCurrentRack();
+  if (!rack) return;
+  normalizeAssignments(rack);
+  view.rack = rack;
+  view.scenario = displayScenario(rack);
+  view.now = computeRack(rack, view.scenario);
+  view.analysis = analyzeCache(rack);
+  computeMatches();
+
+  document.getElementById('mainTitleInput').value = state.mainTitle;
+  document.getElementById('rackSizeSelect').value = String(rack.rackSize);
+  renderSources();
+  renderRackTabs();
+  renderGlobalSummary();
+  document.getElementById('pdu-left').innerHTML = renderPDU('left');
+  document.getElementById('rack-col').innerHTML = renderRack();
+  document.getElementById('pdu-right').innerHTML = renderPDU('right');
+  document.getElementById('config-panel').innerHTML = renderConfigPanel();
+  document.getElementById('redundancyHost').innerHTML = renderRedundancy();
+  document.getElementById('environmentHost').innerHTML = renderEnvironment();
+  renderServerList();
+  updateFilterResults();
+  document.getElementById('undoBtn').disabled = !history.past.length;
+  document.getElementById('redoBtn').disabled = !history.future.length;
+  autosave();
+}
+
+/* =========================================================================
+   7. AZIONI SU RACK E PDU
+   ========================================================================= */
+function updateMainTitle(v) { saveStateToHistory(); state.mainTitle = String(v).slice(0, 60); render(); }
+function updateRackTitle(v) { saveStateToHistory(); getCurrentRack().rackTitle = String(v).slice(0, 30); render(); }
+function changeRackSize(v) {
+  const rack = getCurrentRack(), size = clampNum(v, 6, 60, 42);
+  const over = rack.servers.filter(s => s.position + s.height - 1 > size);
+  if (over.length) { toast(t('invalidPosition') + ' (' + over.length + ')', 'err'); document.getElementById('rackSizeSelect').value = String(rack.rackSize); return; }
+  saveStateToHistory(); rack.rackSize = size; render();
+}
+function addNewRack() { saveStateToHistory(); const r = newRack(state.racks.length + 1, state.sources); state.racks.push(r); state.currentRackId = r.id; render(); }
+function removeRack(id, ev) {
+  if (ev) ev.stopPropagation();
+  if (state.racks.length <= 1) return;
+  if (!confirm(t('confirmRemoveRack'))) return;
+  saveStateToHistory();
+  state.racks = state.racks.filter(r => r.id !== id);
+  if (state.currentRackId === id) state.currentRackId = state.racks[0].id;
+  render();
+}
+function switchRack(id) { state.currentRackId = id; render(); }
+function togglePdu(side) { saveStateToHistory(); const p = getPdu(getCurrentRack(), side); p.on = !p.on; render(); }
+function togglePduSettings(side) { const p = getPdu(getCurrentRack(), side); p.showSettings = !p.showSettings; render(); }
+function updatePduName(side, v) { saveStateToHistory(); getPdu(getCurrentRack(), side).name = String(v).slice(0, 24); render(); }
+function updatePduProfile(side, id) { saveStateToHistory(); applyPduProfile(getPdu(getCurrentRack(), side), id); normalizeAssignments(getCurrentRack()); render(); }
+function updatePduField(side, field, v) {
+  saveStateToHistory();
+  const pdu = getPdu(getCurrentRack(), side);
+  if (field === 'sourceId') pdu.sourceId = v || null;
+  else if (field === 'type' || field === 'singlePhase') pdu[field] = v;
+  else if (field === 'breakersPerPhase') pdu[field] = clampNum(v, 1, 8, 2);
+  else if (field === 'c13' || field === 'c19') pdu[field] = clampNum(v, 0, 96, 0);
+  else pdu[field] = clampNum(v, 1, 250, 32);
+  if (field !== 'c13' && field !== 'c19' && field !== 'sourceId') pdu.model = 'custom';
+  normalizeAssignments(getCurrentRack());
+  render();
+}
+
+/* =========================================================================
+   8. AZIONI SUGLI APPARATI
+   ========================================================================= */
+function selectServer(id) { getCurrentRack().selectedServerId = id; render(); }
+function closeConfigPanel() { getCurrentRack().selectedServerId = null; render(); }
+function deleteServer() {
+  const rack = getCurrentRack(), sv = getSelectedServer(rack);
+  if (!sv) return;
+  saveStateToHistory();
+  rack.servers = rack.servers.filter(s => s.id !== sv.id);
+  rack.selectedServerId = null;
+  render();
+}
+function updateServer(field, value) {
+  const rack = getCurrentRack(), sv = getSelectedServer(rack);
+  if (!sv) return;
+  saveStateToHistory();
+  if (field === 'name') sv.name = String(value).slice(0, 30);
+  else if (field === 'position' || field === 'height') {
+    const pos = field === 'position' ? clampNum(value, 1, rack.rackSize, sv.position) : sv.position;
+    const hgt = field === 'height' ? clampNum(value, 1, 12, sv.height) : sv.height;
+    if (!isPositionValid(rack, pos, hgt, sv.id)) { toast(t('invalidPosition'), 'err'); history.past.pop(); render(); return; }
+    sv.position = pos; sv.height = hgt;
+  }
+  else if (field === 'power' || field === 'nameplate') sv[field] = clampNum(value, 0, 50000, 0);
+  else if (field === 'weight') sv.weight = clampNum(value, 0, 500, 0);
+  else if (field === 'pf') sv.pf = value === '' ? null : clampNum(value, 0.5, 1, null);
+  else if (field === 'plug') sv.plug = value === 'C20' ? 'C20' : 'C14';
+  else if (field === 'dualPower') sv.dualPower = !!value;
+  else sv[field] = value;
+  normalizeAssignments(rack);
+  render();
+}
+function isPositionValid(rack, position, height, excludeId) {
+  if (position < 1 || position + height - 1 > rack.rackSize) return false;
+  return !rack.servers.some(s => s.id !== excludeId &&
+    !(position + height - 1 < s.position || position > s.position + s.height - 1));
+}
+/* Assegnazione automatica: fase e interruttore meno caricati nel caso peggiore. */
+function bestAssignment(rack, side, A) {
+  const phases = getAvailablePhases(rack, side);
+  const worst = analyzeCache(rack).worst[side];
+  let bestP = phases[0].id, bp = Infinity;
+  phases.forEach(p => { const l = worst.phases[p.id] || 0; if (l < bp) { bp = l; bestP = p.id; } });
+  const pool = breakersOfPhase(rack, side, bestP);
+  let bestB = pool.length ? pool[0].id : null, bb = Infinity;
+  pool.forEach(b => { const l = worst.breakers[b.id] || 0; if (l < bb) { bb = l; bestB = b.id; } });
+  return { phase: bestP, breaker: bestB };
+}
+
+function openAddServerDialog(position) {
+  const rack = getCurrentRack();
+  let pos = position;
+  if (!pos) { for (let u = 1; u <= rack.rackSize; u++) { if (isPositionValid(rack, u, 1)) { pos = u; break; } } }
+  const f = '<div class="field"><label>' + esc(t('name')) + '</label><input type="text" id="nsName" maxlength="30" value="Server ' + (rack.servers.length + 1) + '"></div>' +
+    '<div class="field-row"><div class="field"><label>' + esc(t('position')) + '</label><input type="number" id="nsPos" min="1" max="' + rack.rackSize + '" value="' + (pos || 1) + '"></div>' +
+    '<div class="field"><label>' + esc(t('height')) + '</label><input type="number" id="nsH" min="1" max="12" value="1"></div></div>' +
+    '<div class="field-row"><div class="field"><label>' + esc(t('power')) + '</label><input type="number" id="nsW" min="0" step="10" value="400"></div>' +
+    '<div class="field"><label>' + esc(t('weight')) + '</label><input type="number" id="nsKg" min="0" step="0.5" value="15"></div></div>' +
+    '<div class="field"><label>' + esc(t('plug')) + '</label><select id="nsPlug"><option value="C14">C14 \u2192 C13</option><option value="C20">C20 \u2192 C19</option></select></div>' +
+    '<div class="checkbox-row"><input type="checkbox" id="nsDual" checked><label for="nsDual" style="margin:0;text-transform:none;font-size:.82rem;color:var(--ink)">' + esc(t('dualPower')) + '</label></div>' +
+    '<div class="field"><label>' + esc(t('pduSide')) + '</label><select id="nsSide"><option value="left">' + esc(rack.pduLeft.name) + '</option><option value="right">' + esc(rack.pduRight.name) + '</option></select></div>' +
+    '<div class="hint">' + esc(t('settingsHint')) + '</div>' +
+    '<div class="modal-buttons"><button class="btn-secondary" onclick="closeAddServerDialog()">' + esc(t('cancel')) + '</button>' +
+    '<button class="btn-primary" onclick="confirmAddServer()">' + esc(t('add')) + '</button></div>';
+  document.getElementById('addServerForm').innerHTML = f;
+  document.getElementById('addServerModal').classList.add('active');
+}
+function closeAddServerDialog() { document.getElementById('addServerModal').classList.remove('active'); }
+function confirmAddServer() {
+  const rack = getCurrentRack();
+  const sv = {
+    id: uid(),
+    name: String(document.getElementById('nsName').value || 'Server').slice(0, 30),
+    position: clampNum(document.getElementById('nsPos').value, 1, rack.rackSize, 1),
+    height: clampNum(document.getElementById('nsH').value, 1, 12, 1),
+    power: clampNum(document.getElementById('nsW').value, 0, 50000, 0),
+    nameplate: 0,
+    weight: clampNum(document.getElementById('nsKg').value, 0, 500, 0),
+    plug: document.getElementById('nsPlug').value === 'C20' ? 'C20' : 'C14',
+    pf: null,
+    dualPower: document.getElementById('nsDual').checked,
+    pduSide: document.getElementById('nsSide').value === 'left' ? 'left' : 'right'
+  };
+  if (!isPositionValid(rack, sv.position, sv.height)) { toast(t('invalidPosition'), 'err'); return; }
+  const A = legCurrent(sv, sv.dualPower ? 0.5 : 1, rack);
+  const l = bestAssignment(rack, 'left', A), r = bestAssignment(rack, 'right', A);
+  sv.leftPhase = l.phase; sv.leftBreaker = l.breaker;
+  sv.rightPhase = r.phase; sv.rightBreaker = r.breaker;
+  saveStateToHistory();
+  rack.servers.push(sv);
+  rack.selectedServerId = sv.id;
+  closeAddServerDialog();
+  render();
+}
+
+/* --- trascinamento apparati nel rack --- */
+let dragState = { id: null, height: 0, rackId: null };
+
+function handleDragStart(ev, id) {
+  const rack = getCurrentRack();
+  const sv = rack.servers.find(s => s.id === id);
+  if (!sv) return;
+  dragState = { id: id, height: Number(sv.height) || 1, rackId: rack.id };
+  ev.currentTarget.classList.add('dragging');
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = 'move';
+    /* Firefox avvia il trascinamento solo se sono presenti dei dati. */
+    try { ev.dataTransfer.setData('text/plain', id); } catch (e) {}
+  }
+}
+function handleDragEnd(ev) {
+  if (ev && ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('dragging');
+  clearDropHighlights();
+  dragState = { id: null, height: 0, rackId: null };
+}
+function clearDropHighlights() {
+  document.querySelectorAll('.rack-unit').forEach(u => u.classList.remove('drop-target', 'drop-invalid'));
+}
+function handleDragOver(ev, position) {
+  if (!dragState.id) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  const rack = getCurrentRack();
+  const valid = isPositionValid(rack, position, dragState.height, dragState.id);
+  clearDropHighlights();
+  for (let u = position; u < position + dragState.height && u <= rack.rackSize; u++) {
+    const el = document.querySelector('.rack-unit[data-position="' + u + '"]');
+    if (el) el.classList.add(valid ? 'drop-target' : 'drop-invalid');
+  }
+  return false;
+}
+function handleDragLeave(ev) {
+  if (ev && ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('drop-target', 'drop-invalid');
+}
+function handleDrop(ev, position) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (!dragState.id) return;
+  clearDropHighlights();
+  const rack = getCurrentRack();
+  const sv = rack.servers.find(s => s.id === dragState.id);
+  const id = dragState.id;
+  dragState = { id: null, height: 0, rackId: null };
+  if (!sv) return;
+  if (sv.position === position) return;
+  /* Rilascio sopra un altro apparato: scambio di posto se hanno la stessa altezza. */
+  const occupant = rack.servers.find(s => s.id !== id &&
+    position >= s.position && position <= s.position + s.height - 1);
+  if (occupant) {
+    if (occupant.height !== sv.height) { toast(t('invalidPosition'), 'err'); return; }
+    saveStateToHistory();
+    const p = sv.position;
+    sv.position = occupant.position;
+    occupant.position = p;
+    rack.selectedServerId = id;
+    render();
+    return;
+  }
+  if (!isPositionValid(rack, position, sv.height, id)) { toast(t('invalidPosition'), 'err'); return; }
+  saveStateToHistory();
+  sv.position = position;
+  rack.selectedServerId = id;
+  render();
+}
+
+/* =========================================================================
+   9. OTTIMIZZATORE (bin-packing fase + interruttore, sul caso peggiore)
+   ========================================================================= */
+function computeOptimization(sides) {
+  const rack = getCurrentRack();
+  const suggestions = [];
+  const preview = {};
+  sides.forEach(side => {
+    const phases = getAvailablePhases(rack, side);
+    if (phases.length < 2) return;
+    const legs = rack.servers
+      .filter(sv => sv.dualPower || sv.pduSide === side)
+      .map(sv => ({ sv: sv, A: legCurrent(sv, 1, rack) }))
+      .sort((a, b) => b.A - a.A);
+    const pLoad = {}, bLoad = {};
+    phases.forEach(p => { pLoad[p.id] = 0; });
+    getAvailableBreakers(rack, side).forEach(b => { bLoad[b.id] = 0; });
+    legs.forEach(L => {
+      let bestP = phases[0].id, bp = Infinity;
+      phases.forEach(p => { if (pLoad[p.id] < bp - 1e-9) { bp = pLoad[p.id]; bestP = p.id; } });
+      const pool = breakersOfPhase(rack, side, bestP);
+      let bestB = pool.length ? pool[0].id : null, bb = Infinity;
+      pool.forEach(b => { if (bLoad[b.id] < bb - 1e-9) { bb = bLoad[b.id]; bestB = b.id; } });
+      pLoad[bestP] += L.A; if (bestB) bLoad[bestB] += L.A;
+      const curP = side === 'left' ? L.sv.leftPhase : L.sv.rightPhase;
+      const curB = side === 'left' ? L.sv.leftBreaker : L.sv.rightBreaker;
+      if (curP !== bestP || curB !== bestB) {
+        suggestions.push({ id: L.sv.id, name: L.sv.name, side: side, fromPhase: curP, toPhase: bestP, fromBreaker: curB, toBreaker: bestB, A: L.A });
+      }
+    });
+    preview[side] = pLoad;
+  });
+  return { suggestions: suggestions, preview: preview };
+}
+let pendingOptimization = null;
+function openOptimizationModal(which) {
+  const rack = getCurrentRack();
+  const sides = which === 'both' ? ['left', 'right'] : [which];
+  const opt = computeOptimization(sides);
+  const host = document.getElementById('optimizationContent');
+  if (!opt.suggestions.length) {
+    host.innerHTML = '<div class="empty-state"><strong>' + esc(t('alreadyOptimal')) + '</strong><br>' + esc(t('noChangesNeeded')) + '</div>' +
+      '<div class="modal-buttons"><button class="btn-secondary" onclick="closeOptimizationModal()">' + esc(t('close')) + '</button></div>';
+    document.getElementById('optimizationModal').classList.add('active');
+    return;
+  }
+  let h = '';
+  sides.forEach(side => {
+    if (!opt.preview[side]) return;
+    const pdu = getPdu(rack, side), worst = analyzeCache(rack).worst[side];
+    h += '<div class="comparison-grid"><div class="comparison-card"><div class="comparison-header">' + esc(pdu.name) + ' \u00b7 ' + esc(t('current')) + '</div>';
+    getAvailablePhases(rack, side).forEach(p => { h += '<div class="failover-line"><span>' + esc(p.name) + '</span><span>' + num(worst.phases[p.id] || 0) + ' A</span></div>'; });
+    h += '</div><div class="comparison-card optimized"><div class="comparison-header">' + esc(pdu.name) + ' \u00b7 ' + esc(t('optimized')) + '</div>';
+    getAvailablePhases(rack, side).forEach(p => { h += '<div class="failover-line"><span>' + esc(p.name) + '</span><span>' + num(opt.preview[side][p.id] || 0) + ' A</span></div>'; });
+    h += '</div></div>';
+  });
+  h += '<div class="panel-title" style="margin-top:8px">' + esc(t('suggestedActions')) + ' (' + opt.suggestions.length + ')</div>';
+  opt.suggestions.forEach(s => {
+    const ph = id => { const p = PDU_CONFIG[s.side].phases.find(x => x.id === id); return p ? p.name : '?'; };
+    const br = id => { const b = getAvailableBreakers(rack, s.side).find(x => x.id === id); return b ? b.name : '?'; };
+    h += '<div class="suggestion-item"><strong>' + esc(s.name) + '</strong> \u00b7 ' + esc(getPdu(rack, s.side).name) + '<br>' +
+      esc(t('moveFrom')) + ' ' + esc(ph(s.fromPhase)) + '/' + esc(br(s.fromBreaker)) + ' \u2192 ' +
+      esc(ph(s.toPhase)) + '/' + esc(br(s.toBreaker)) + ' (' + num(s.A) + ' A)</div>';
+  });
+  h += '<div class="modal-buttons"><button class="btn-secondary" onclick="closeOptimizationModal()">' + esc(t('cancel')) + '</button>' +
+    '<button class="btn-primary" onclick="applyOptimization()">' + esc(t('apply')) + '</button></div>';
+  host.innerHTML = h;
+  pendingOptimization = opt.suggestions;
+  document.getElementById('optimizationModal').classList.add('active');
+}
+function closeOptimizationModal() { document.getElementById('optimizationModal').classList.remove('active'); pendingOptimization = null; }
+function applyOptimization() {
+  if (!pendingOptimization) return;
+  const rack = getCurrentRack();
+  saveStateToHistory();
+  pendingOptimization.forEach(s => {
+    const sv = rack.servers.find(x => x.id === s.id);
+    if (!sv) return;
+    if (s.side === 'left') { sv.leftPhase = s.toPhase; sv.leftBreaker = s.toBreaker; }
+    else { sv.rightPhase = s.toPhase; sv.rightBreaker = s.toBreaker; }
+  });
+  const n = pendingOptimization.length;
+  closeOptimizationModal();
+  render();
+  toast(t('optimizationApplied') + ': ' + n + ' ' + t('reconfigured'), 'ok');
+}
+
+/* =========================================================================
+   10. SORGENTI: attivazione, creazione e modifica
+   ========================================================================= */
+/* Alla prima attivazione predispongo due sorgenti indipendenti gia collegate
+   alle due vie: e l'ipotesi 2N, il punto di partenza piu comune. I dati non
+   vengono cancellati alla disattivazione, restano pronti per la riaccensione. */
+function setUseSources(flag) {
+  saveStateToHistory();
+  state.settings.useSources = !!flag;
+  if (flag && !state.sources.length) {
+    const a = newSource('UPS A', 'ups'), b = newSource('UPS B', 'ups');
+    state.sources = [a, b];
+    state.racks.forEach(r => {
+      if (!r.pduLeft.sourceId) r.pduLeft.sourceId = a.id;
+      if (!r.pduRight.sourceId) r.pduRight.sourceId = b.id;
+    });
+  }
+  if (flag) state.settings.sourcesCollapsed = false;
+  render();
+}
+function toggleSourcesCollapsed() {
+  state.settings.sourcesCollapsed = !state.settings.sourcesCollapsed;
+  render();
+}
+let editingSourceId = null;
+function openSourceModal(id) {
+  editingSourceId = id || null;
+  const src = id ? getSource(id) : newSource('UPS ' + (state.sources.length + 1), 'ups');
+  if (!src) return;
+  const f = (key, label, min, max, step) =>
+    '<div class="field"><label>' + esc(t(label)) + '</label><input type="number" id="src_' + key + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + src[key] + '"></div>';
+  let hh = '<div class="field"><label>' + esc(t('sourceName')) + '</label><input type="text" id="src_name" maxlength="24" value="' + attr(src.name) + '"></div>';
+  hh += '<div class="field-row"><div class="field"><label>' + esc(t('sourceKind')) + '</label><select id="src_kind">' +
+    ['ups', 'grid', 'gen'].map(k => '<option value="' + k + '"' + (src.kind === k ? ' selected' : '') + '>' +
+      esc(t('kind' + (k === 'ups' ? 'Ups' : k === 'gen' ? 'Gen' : 'Grid'))) + '</option>').join('') + '</select></div>' +
+    '<div class="field"><label>' + esc(t('location')) + '</label><select id="src_location">' +
+    '<option value="room"' + (src.location === 'room' ? ' selected' : '') + '>' + esc(t('room')) + '</option>' +
+    state.racks.map(r => '<option value="' + attr(r.id) + '"' + (src.location === r.id ? ' selected' : '') + '>' + esc(t('inRack')) + ' ' + esc(r.rackTitle) + '</option>').join('') +
+    '</select></div></div>';
+  hh += '<div class="field-row">' + f('kvaUnit', 'kvaUnit', 1, 5000, 1) +
+    '<div class="field"><label>' + esc(t('outPf')) + '</label><select id="src_outPf">' +
+    [0.8, 0.9, 0.95, 1].map(v => '<option value="' + v + '"' + (Number(src.outPf) === v ? ' selected' : '') + '>' + v.toFixed(2) + '</option>').join('') +
+    '</select></div></div>';
+  hh += '<div class="field-row">' + f('units', 'units', 1, 8, 1) +
+    '<div class="field"><label>' + esc(t('redundant')) + '</label><select id="src_redundant">' +
+    '<option value="0"' + (src.redundant ? '' : ' selected') + '>\u2014</option>' +
+    '<option value="1"' + (src.redundant ? ' selected' : '') + '>N+1</option></select></div></div>';
+  hh += '<div class="field-row">' + f('autonomyMin', 'autonomyMin', 0, 480, 1) + f('refLoadPct', 'refLoadPct', 10, 100, 5) + '</div>';
+  hh += '<div class="hint">' + esc(t('hintExponent')) + '</div>';
+  hh += '<div class="modal-buttons">' +
+    (id ? '<button class="btn-secondary" style="margin-right:auto;color:var(--alarm)" onclick="deleteSource()">' + esc(t('deleteSource')) + '</button>' : '') +
+    '<button class="btn-secondary" onclick="closeSourceModal()">' + esc(t('cancel')) + '</button>' +
+    '<button class="btn-primary" onclick="applySource()">' + esc(t('apply')) + '</button></div>';
+  document.getElementById('sourceContent').innerHTML = hh;
+  document.getElementById('sourceModal').classList.add('active');
+}
+function closeSourceModal() { document.getElementById('sourceModal').classList.remove('active'); editingSourceId = null; }
+function applySource() {
+  const g = k => document.getElementById('src_' + k).value;
+  saveStateToHistory();
+  let src = editingSourceId ? getSource(editingSourceId) : null;
+  const isNew = !src;
+  if (isNew) src = newSource('', 'ups');
+  src.name = String(g('name') || 'UPS').slice(0, 24);
+  src.kind = g('kind');
+  src.location = g('location');
+  src.kvaUnit = clampNum(g('kvaUnit'), 1, 5000, 20);
+  src.outPf = clampNum(g('outPf'), 0.5, 1, 1);
+  src.units = clampNum(g('units'), 1, 8, 1);
+  src.redundant = g('redundant') === '1';
+  src.autonomyMin = clampNum(g('autonomyMin'), 0, 480, 10);
+  src.refLoadPct = clampNum(g('refLoadPct'), 10, 100, 100);
+  if (isNew) state.sources.push(src);
+  closeSourceModal();
+  render();
+}
+function deleteSource() {
+  if (!editingSourceId) return;
+  if (!confirm(t('confirmDeleteSource'))) return;
+  saveStateToHistory();
+  const id = editingSourceId;
+  state.sources = state.sources.filter(s => s.id !== id);
+  state.racks.forEach(r => {
+    if (r.pduLeft.sourceId === id) r.pduLeft.sourceId = null;
+    if (r.pduRight.sourceId === id) r.pduRight.sourceId = null;
+  });
+  closeSourceModal();
+  render();
+}
+
+/* =========================================================================
+   10b. PARAMETRI DEL SINGOLO RACK (sovrascrivono quelli di progetto)
+   ========================================================================= */
+function openRackParamsModal() {
+  const rack = getCurrentRack();
+  const v = x => (x === null || x === undefined ? '' : x);
+  document.getElementById('rackParamsContent').innerHTML =
+    '<div class="field"><label>' + esc(t('rackPf')) + '</label><input type="number" id="rp_pf" min="0.5" max="1" step="0.01" value="' + v(rack.powerFactor) + '" placeholder="' + num(state.settings.powerFactor, 2) + '">' +
+    '<div class="hint">' + esc(t('inherited')) + ' \u00b7 ' + esc(t('hintPf')) + '</div></div>' +
+    '<div class="field"><label>' + esc(t('rackDiversity')) + '</label><input type="number" id="rp_div" min="10" max="100" step="1" value="' + v(rack.diversity) + '" placeholder="' + state.settings.diversity + '">' +
+    '<div class="hint">' + esc(t('inherited')) + '</div></div>' +
+    '<div class="field"><label>' + esc(t('rackTareField')) + '</label><input type="number" id="rp_tare" min="0" max="400" step="5" value="' + v(rack.tare) + '" placeholder="' + state.settings.rackTare + '">' +
+    '<div class="hint">' + esc(t('inherited')) + '</div></div>' +
+    '<div class="modal-buttons"><button class="btn-secondary" onclick="closeRackParamsModal()">' + esc(t('cancel')) + '</button>' +
+    '<button class="btn-primary" onclick="applyRackParams()">' + esc(t('apply')) + '</button></div>';
+  document.getElementById('rackParamsModal').classList.add('active');
+}
+function closeRackParamsModal() { document.getElementById('rackParamsModal').classList.remove('active'); }
+function applyRackParams() {
+  const rack = getCurrentRack();
+  saveStateToHistory();
+  const pf = document.getElementById('rp_pf').value;
+  const dv = document.getElementById('rp_div').value;
+  const tr = document.getElementById('rp_tare').value;
+  rack.powerFactor = pf === '' ? null : clampNum(pf, 0.5, 1, null);
+  rack.diversity = dv === '' ? null : clampNum(dv, 10, 100, null);
+  rack.tare = tr === '' ? null : clampNum(tr, 0, 400, null);
+  closeRackParamsModal();
+  render();
+}
+
+/* =========================================================================
+   10c. PARAMETRI ELETTRICI DI PROGETTO
+   Tre gruppi tematici, una spiegazione per campo e anteprima viva: chi non
+   conosce un parametro capisce cosa cambia prima di confermarlo.
+   ========================================================================= */
+const SETTING_FIELDS = [
+  { group: 'grpNetwork', key: 'voltageLN', label: 'voltageLN', hint: 'hintVoltage', min: 100, max: 400, step: 1 },
+  { group: 'grpNetwork', key: 'powerFactor', label: 'powerFactorGlobal', hint: 'hintPf', min: 0.5, max: 1, step: 0.01 },
+  { group: 'grpLoad', key: 'diversity', label: 'diversity', hint: 'hintDiversity', min: 10, max: 100, step: 1 },
+  { group: 'grpLoad', key: 'h3Percent', label: 'h3Percent', hint: 'hintH3', min: 0, max: 60, step: 1 },
+  { group: 'grpThresholds', key: 'warnPct', label: 'warnPct', hint: 'hintWarn', min: 10, max: 100, step: 1 },
+  { group: 'grpThresholds', key: 'alarmPct', label: 'alarmPct', hint: 'hintAlarm', min: 10, max: 120, step: 1 },
+  { group: 'grpThresholds', key: 'deltaT', label: 'deltaT', hint: 'hintDeltaT', min: 5, max: 25, step: 1 },
+  { group: 'grpThresholds', key: 'rackTare', label: 'rackTare', hint: 'hintTare', min: 0, max: 400, step: 5 },
+  { group: 'grpThresholds', key: 'batteryExponent', label: 'batteryExponent', hint: 'hintExponent', min: 1, max: 2, step: 0.05 }
+];
+function openSettingsModal() {
+  const s = state.settings;
+  let hh = '<div class="preview-box" id="settingsPreview"></div>';
+  ['grpNetwork', 'grpLoad', 'grpThresholds'].forEach(gr => {
+    hh += '<div class="setting-group"><div class="setting-group-title">' + esc(t(gr)) + '</div>';
+    SETTING_FIELDS.filter(f => f.group === gr).forEach(f => {
+      hh += '<div class="field"><label>' + esc(t(f.label)) + '</label>' +
+        '<input type="number" id="set_' + f.key + '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + s[f.key] + '" oninput="updateSettingsPreview()">' +
+        '<div class="hint">' + esc(t(f.hint)) + '</div></div>';
+    });
+    hh += '</div>';
+  });
+  hh += '<div class="modal-buttons">' +
+    '<button class="btn-secondary" style="margin-right:auto" onclick="resetSettings()">' + esc(t('resetDefaults')) + '</button>' +
+    '<button class="btn-secondary" onclick="closeSettingsModal()">' + esc(t('cancel')) + '</button>' +
+    '<button class="btn-primary" onclick="applySettings()">' + esc(t('apply')) + '</button></div>';
+  document.getElementById('settingsContent').innerHTML = hh;
+  updateSettingsPreview();
+  document.getElementById('settingsModal').classList.add('active');
+}
+/* L'anteprima usa i valori digitati, non quelli salvati: si vede l'effetto prima di confermare. */
+function updateSettingsPreview() {
+  const g = k => { const el = document.getElementById('set_' + k); return el ? Number(el.value) : state.settings[k]; };
+  const v = g('voltageLN') || 230, pf = g('powerFactor') || 1, dv = (g('diversity') || 100) / 100, h3 = (g('h3Percent') || 0) / 100;
+  const A = (400 * dv) / (pf * v);
+  const neutral = Math.sqrt(0 + Math.pow(3 * h3 * 10, 2));
+  const el = document.getElementById('settingsPreview');
+  if (!el) return;
+  el.innerHTML = '<div class="summary-card-title">' + esc(t('previewTitle')) + '</div>' +
+    '<div class="preview-line"><span>' + esc(t('previewLine')) + '</span><strong>' + num(A, 2) + ' A</strong></div>' +
+    '<div class="preview-line"><span>' + esc(t('previewNeutral')) + '</span><strong>' + num(neutral, 2) + ' A</strong></div>';
+}
+function closeSettingsModal() { document.getElementById('settingsModal').classList.remove('active'); }
+function resetSettings() {
+  SETTING_FIELDS.forEach(f => { const el = document.getElementById('set_' + f.key); if (el) el.value = DEFAULT_SETTINGS[f.key]; });
+  updateSettingsPreview();
+}
+function applySettings() {
+  saveStateToHistory();
+  SETTING_FIELDS.forEach(f => {
+    const el = document.getElementById('set_' + f.key);
+    if (el) state.settings[f.key] = clampNum(el.value, f.min, f.max, DEFAULT_SETTINGS[f.key]);
+  });
+  closeSettingsModal();
+  render();
+}
+
+/* =========================================================================
+   11. IMPORT / EXPORT / STAMPA
+   ========================================================================= */
+function saveConfiguration() {
+  const data = JSON.stringify({ schema: 1, app: 'rack-pdu', mainTitle: state.mainTitle, settings: state.settings, currentRackId: state.currentRackId, sources: state.sources, racks: state.racks }, null, 2);
+  downloadBlob(data, 'application/json', sanitizeFilename(state.mainTitle) + '.json');
+  toast(t('saved'), 'ok');
+}
+function sanitizeFilename(s) { return String(s || 'rack').replace(/[^\w\-. ]+/g, '_').trim().slice(0, 60) || 'rack'; }
+function downloadBlob(content, type, filename) {
+  const blob = new Blob([content], { type: type + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+function loadConfiguration(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = migrate(JSON.parse(e.target.result));
+      saveStateToHistory();
+      state.mainTitle = parsed.mainTitle; state.settings = parsed.settings;
+      state.sources = parsed.sources; state.racks = parsed.racks; state.currentRackId = parsed.currentRackId;
+      render();
+      toast(t('loaded'), 'ok');
+    } catch (err) {
+      toast(t('invalidFile'), 'err');
+    }
+    ev.target.value = '';
+  };
+  reader.readAsText(file);
+}
+function migPdu(p, side, fallbackName) {
+  p = p || {};
+  const pdu = {
+    name: String(p.name || fallbackName).slice(0, 24),
+    model: p.model || 'custom',
+    type: p.type === '1F' ? '1F' : '3F',
+    singlePhase: p.singlePhase || (side === 'left' ? 'L1' : 'R1'),
+    on: p.on === undefined ? true : !!p.on,
+    showSettings: false,
+    mainBreaker: clampNum(p.mainBreaker, 1, 250, 32),
+    breakersPerPhase: clampNum(p.breakersPerPhase, 1, 8, 2),
+    breakerCurrent: clampNum(p.breakerCurrent, 1, 125, 10),
+    c13: clampNum(p.c13, 0, 96, 24),
+    c19: clampNum(p.c19, 0, 48, 6),
+    sourceId: p.sourceId || null
+  };
+  return pdu;
+}
+function migrate(data) {
+  if (!data || !Array.isArray(data.racks) || !data.racks.length) throw new Error('invalid');
+  const out = {
+    mainTitle: String(data.mainTitle || I18N.it.mainTitleDefault).slice(0, 60),
+    settings: Object.assign({}, DEFAULT_SETTINGS, data.settings || {}),
+    sources: [], racks: [], currentRackId: null
+  };
+  (Array.isArray(data.sources) ? data.sources : []).forEach(s => {
+    out.sources.push({
+      id: String(s.id === undefined || s.id === null ? uid() : s.id),
+      name: String(s.name || 'UPS').slice(0, 24),
+      kind: ['ups', 'grid', 'gen'].indexOf(s.kind) === -1 ? 'ups' : s.kind,
+      units: clampNum(s.units, 1, 8, 1),
+      redundant: !!s.redundant,
+      kvaUnit: clampNum(s.kvaUnit, 1, 5000, 20),
+      outPf: clampNum(s.outPf, 0.5, 1, 1),
+      location: s.location || 'room',
+      autonomyMin: clampNum(s.autonomyMin, 0, 480, 10),
+      refLoadPct: clampNum(s.refLoadPct, 10, 100, 100)
+    });
+  });
+  data.racks.forEach((r, i) => {
+    const rack = {
+      id: String(r.id === undefined || r.id === null ? uid() : r.id),
+      rackTitle: String(r.rackTitle || ('Rack ' + (i + 1))).slice(0, 30),
+      rackSize: clampNum(r.rackSize, 6, 60, 42),
+      servers: [], selectedServerId: null,
+      powerFactor: r.powerFactor > 0 ? clampNum(r.powerFactor, 0.5, 1, null) : null,
+      diversity: r.diversity > 0 ? clampNum(r.diversity, 10, 100, null) : null,
+      tare: (r.tare === null || r.tare === undefined) ? null : clampNum(r.tare, 0, 400, null),
+      pduLeft: migPdu(r.pduLeft, 'left', 'PDU A'),
+      pduRight: migPdu(r.pduRight, 'right', 'PDU B')
+    };
+    (Array.isArray(r.servers) ? r.servers : []).forEach(s => {
+      rack.servers.push({
+        id: String(s.id === undefined || s.id === null ? uid() : s.id),
+        name: String(s.name || 'Server').slice(0, 30),
+        position: clampNum(s.position, 1, rack.rackSize, 1),
+        height: clampNum(s.height, 1, 12, 1),
+        power: clampNum(s.power, 0, 50000, 0),
+        nameplate: clampNum(s.nameplate, 0, 50000, 0),
+        weight: clampNum(s.weight, 0, 500, 0),
+        plug: s.plug === 'C20' ? 'C20' : 'C14',
+        pf: s.pf ? clampNum(s.pf, 0.5, 1, null) : null,
+        dualPower: !!s.dualPower,
+        pduSide: s.pduSide === 'left' ? 'left' : 'right',
+        leftPhase: s.leftPhase || 'L1', rightPhase: s.rightPhase || 'R1',
+        leftBreaker: s.leftBreaker || 'LB1', rightBreaker: s.rightBreaker || 'RB1'
+      });
+    });
+    normalizeAssignments(rack);
+    out.racks.push(rack);
+  });
+  /* Il modello a monte si attiva solo se il file lo dichiara esplicitamente o
+     se contiene gia delle sorgenti. I file piu vecchi restano al livello rack. */
+  const declared = data.settings && typeof data.settings.useSources === 'boolean' ? data.settings.useSources : null;
+  out.settings.useSources = declared !== null ? declared : out.sources.length > 0;
+  if (out.sources.length) {
+    const ids = out.sources.map(s => s.id);
+    out.racks.forEach(r => {
+      if (ids.indexOf(r.pduLeft.sourceId) === -1) r.pduLeft.sourceId = null;
+      if (ids.indexOf(r.pduRight.sourceId) === -1) r.pduRight.sourceId = null;
+    });
+    out.sources.forEach(s => { if (s.location !== 'room' && !out.racks.some(r => r.id === s.location)) s.location = 'room'; });
+  }
+  const wanted = String(data.currentRackId);
+  out.currentRackId = out.racks.some(r => r.id === wanted) ? wanted : out.racks[0].id;
+  return out;
+}
+function exportCsv() {
+  const sep = ';';
+  const rows = [[t('rack'), t('serverCol'), t('positionCol'), t('height'), t('power'), t('nameplate'), t('weight'),
+    t('typeCol'), t('plug'), 'PDU A', 'PDU B'].join(sep)];
+  state.racks.forEach(rack => {
+    rack.servers.slice().sort((a, b) => b.position - a.position).forEach(sv => {
+      const conn = side => {
+        const ph = PDU_CONFIG[side].phases.find(p => p.id === getMappedPhase(rack, side, side === 'left' ? sv.leftPhase : sv.rightPhase));
+        const br = getAvailableBreakers(rack, side).find(b => b.id === (side === 'left' ? sv.leftBreaker : sv.rightBreaker));
+        return (ph ? ph.name : '') + '/' + (br ? br.name : '');
+      };
+      const used = sv.dualPower ? [conn('left'), conn('right')] : (sv.pduSide === 'left' ? [conn('left'), ''] : ['', conn('right')]);
+      rows.push([rack.rackTitle, sv.name, sv.position, sv.height, sv.power || 0, sv.nameplate || 0, sv.weight || 0,
+        sv.dualPower ? t('dual') : t('single'), sv.plug || 'C14', used[0], used[1]]
+        .map(v => '"' + String(v).replace(/"/g, '""') + '"').join(sep));
+    });
+  });
+  downloadBlob('\ufeff' + rows.join('\r\n'), 'text/csv', sanitizeFilename(state.mainTitle) + '.csv');
+  toast(t('saved'), 'ok');
+}
+function printCurrentRack() { window.print(); }
+function printAllRacks() {
+  const original = state.currentRackId;
+  const host = document.createElement('div');
+  state.racks.forEach(r => {
+    invalidateAnalysis();
+    view.rack = r; view.scenario = displayScenario(r);
+    view.now = computeRack(r, view.scenario); view.analysis = analyzeCache(r);
+    const page = document.createElement('div');
+    page.className = 'print-page';
+    page.innerHTML = '<h2 style="margin-bottom:10px">' + esc(state.mainTitle) + ' \u2014 ' + esc(r.rackTitle) + '</h2>' +
+      '<div class="grid-layout"><div class="col-pdu">' + renderPDU('left') + '</div><div class="col-rack">' + renderRack() +
+      '</div><div class="col-pdu">' + renderPDU('right') + '</div></div>' + renderRedundancy();
+    host.appendChild(page);
+  });
+  const first = sourcesActive() ? host.firstChild : null;
+  if (first) {
+    const src = document.getElementById('sourcesHost');
+    if (src && src.innerHTML) {
+      const box = document.createElement('div');
+      box.innerHTML = src.innerHTML;
+      first.insertBefore(box, first.firstChild);
+    }
+  }
+  const container = document.querySelector('.container');
+  container.style.display = 'none';
+  document.body.appendChild(host);
+  window.print();
+  host.remove();
+  container.style.display = '';
+  state.currentRackId = original;
+  render();
+}
+
+/* =========================================================================
+   12. AUTOSALVATAGGIO E AVVIO
+   ========================================================================= */
+let autosaveTimer = null;
+function autosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    safeStore.set(AUTOSAVE_KEY, JSON.stringify({ schema: 1, mainTitle: state.mainTitle, settings: state.settings, currentRackId: state.currentRackId, sources: state.sources, racks: state.racks }));
+  }, 600);
+}
+function restoreAutosave() {
+  const raw = safeStore.get(AUTOSAVE_KEY);
+  if (!raw) return false;
+  try {
+    const parsed = migrate(JSON.parse(raw));
+    state.mainTitle = parsed.mainTitle; state.settings = parsed.settings;
+    state.sources = parsed.sources; state.racks = parsed.racks; state.currentRackId = parsed.currentRackId;
+    return true;
+  } catch (e) { safeStore.del(AUTOSAVE_KEY); return false; }
+}
+function init() {
+  applyStaticTranslations();
+  const restored = restoreAutosave();
+  if (!restored) {
+    state.sources = [];
+    const r = newRack(1, state.sources);
+    state.racks = [r];
+    state.currentRackId = r.id;
+  }
+  document.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  });
+  document.querySelectorAll('.modal').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+  });
+  render();
+  if (restored) toast(t('autosaveOn'));
+}
+init();
+</script>
+</body>
+</html>
